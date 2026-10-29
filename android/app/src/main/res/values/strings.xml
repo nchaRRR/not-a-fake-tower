@@ -4,4 +4,6 @@
     <string name="title_activity_main">NFA Tower</string>
     <string name="package_name">com.nimoriq.nfatower</string>
     <string name="custom_url_scheme">com.nimoriq.nfatower</string>
+    <!-- AdMob App ID (AdMob → Apps → Android). -->
+    <string name="admob_app_id">ca-app-pub-8065721637615283~8630218841</string>
 </resources>
