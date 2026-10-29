@@ -1,0 +1,23 @@
+{
+  "appId": "com.nimoriq.nfatower",
+  "appName": "NFA Tower",
+  "webDir": "dist/app",
+  "backgroundColor": "#bfe0ff",
+  "ios": {
+    "contentInset": "never",
+    "scrollEnabled": false,
+    "backgroundColor": "#bfe0ff"
+  },
+  "android": {
+    "backgroundColor": "#bfe0ff",
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "SystemBars": {
+      "insetsHandling": "css",
+      "initialViewportFitValueHint": "cover",
+      "hidden": true,
+      "style": "DARK"
+    }
+  }
+}

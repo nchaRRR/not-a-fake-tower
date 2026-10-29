@@ -42,6 +42,6 @@ Rules, solver and generator live in `src/rules.js`. Every level is checked to be
 
 ## Not done yet
 
-Mobile shells (Capacitor Android/iOS) and CI, real AdMob and purchases, Supabase account/cloud save. Privacy and support pages: nimoriq.com/nfa-tower-privacy/ and nimoriq.com/nfa-tower-support/.
+Real AdMob and purchases. Mobile builds: see MOBIL-YAYIN.md. Privacy and support pages: nimoriq.com/nfa-tower-privacy/ and nimoriq.com/nfa-tower-support/.
 
 © 2026 Nimoriq
