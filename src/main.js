@@ -16,6 +16,7 @@ import RAW_LEVELS from './levels.json';
 import { UPGRADES, SKINS, HINT_PACKS, startPower, coinReward } from './shop.js';
 import { startMusic, setMusicEnabled, setSong } from './music.js';
 import { createAds } from './ads.js';
+import { createAccount } from './account.js';
 import { storeLink, openLink } from './promo.js';
 import promoIcon from '../assets/promo-nfa-128.webp';
 import { scheduleNotifications, askNotificationPermission, planNotifications } from './notify.js';
@@ -1214,6 +1215,10 @@ async function win() {
   starEls.forEach((el) => el.classList.remove('on'));
   updateCoins();
   showScreen('screen-won');
+  if (!level.daily && level.n > 0) {
+    account.onRunEnd();
+    setTimeout(() => { if (state === 'won' && my === gen) account.maybeAsk(); }, 2200);
+  }
   for (let i = 0; i < stars; i++) {
     await wait(0.28);
     if (my !== gen) return;
@@ -1751,8 +1756,19 @@ function refreshToggles() {
   resetArmed = false;
 }
 let resetArmed = false;
-on('btn-settings', () => { sfx.tap(); refreshToggles(); showScreen('screen-settings'); });
+on('btn-settings', () => { sfx.tap(); refreshToggles(); $('account-state').textContent = account.label(); showScreen('screen-settings'); });
 on('btn-settings-back', () => { sfx.tap(); goHome(); });
+
+// ---------------------------------------------------------------- account (Supabase, shared with Not a Fake Ad)
+const anyModalOpen = () => ['screen-shop', 'screen-map', 'screen-intro', 'screen-daily', 'screen-treasure', 'screen-ach', 'screen-settings', 'screen-how', 'screen-ad']
+  .some((id) => !$(id).hidden) || !$('screen-account').hidden;
+const account = createAccount({
+  save, writeSave, sfx, track, fmt, anyModalOpen,
+  popup: (msg) => setTip(msg, 2600),
+  refreshWallet: () => updateCoins(),
+  backToSettings: () => { refreshToggles(); $('account-state').textContent = account.label(); showScreen('screen-settings'); },
+});
+on('btn-account', () => { sfx.tap(); $('screen-settings').hidden = true; account.open('settings'); });
 for (const id of ['link-privacy', 'link-support']) $(id).addEventListener('click', (e) => { e.preventDefault(); openLink($(id).href); });
 on('btn-lang', () => { setLang(getLang() === 'tr' ? 'en' : 'tr'); refreshToggles(); sfx.tap(); });
 on('btn-sound', () => { save.muted = !save.muted; setMuted(save.muted); writeSave(save); refreshToggles(); sfx.tap(); });
@@ -1762,7 +1778,7 @@ on('btn-vibrate', () => { save.vibrate = save.vibrate === false; writeSave(save)
 on('btn-reset', () => {
   sfx.tap();
   if (!resetArmed) { resetArmed = true; $('btn-reset').textContent = t('set.sure'); return; }
-  const keep = { muted: save.muted, music: save.music, vibrate: save.vibrate };
+  const keep = { muted: save.muted, music: save.music, vibrate: save.vibrate, account: save.account, notify: save.notify };
   for (const k of Object.keys(save)) delete save[k];
   Object.assign(save, loadSaveFresh(), keep);
   writeSave(save);
