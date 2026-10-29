@@ -1,0 +1,472 @@
+<title>Not a Fake Ad: Tower</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=Nunito:wght@600;700;800&display=swap">
+<style>
+  /* Layout: full-bleed 3D towers; chunky sticker cards float over them (same look as Not a Fake Ad). */
+  :root {
+    --ink: #2b2140;
+    --ink-soft: #5d5172;
+    --paper: #fff7ef;
+    --line: #ecd9cb;
+    --blue: #2f7cf6;
+    --blue-deep: #1d5bc4;
+    --red: #e8453c;
+    --red-deep: #b52f28;
+    --green: #2eb872;
+    --green-deep: #1f8a54;
+    --gold: #ffbe2e;
+    --gold-deep: #c98a00;
+    --lilac: #8a78f0;
+    --font-display: "Baloo 2", ui-rounded, "Arial Rounded MT Bold", system-ui, sans-serif;
+    --font-body: "Nunito", ui-rounded, system-ui, -apple-system, "Segoe UI", sans-serif;
+    color-scheme: light;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; overflow: hidden; margin: 0; }
+  body { background: #bfe0ff; color: var(--ink); font-family: var(--font-body); -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; overscroll-behavior: none; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+
+  /* ---------- HUD ---------- */
+  #hud { position: fixed; inset: 0; pointer-events: none;
+         padding-top: calc(env(safe-area-inset-top, 0px) + 12px);
+         padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .hud-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; background: var(--paper); border: 3px solid var(--ink); border-radius: 999px;
+          padding: 2px 12px 2px 6px; font-family: var(--font-display); font-size: 20px; line-height: 1.3; box-shadow: 0 3px 0 var(--ink);
+          font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .chip-level { padding: 2px 14px; font-size: 18px; min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; }
+  .coin-icon { width: 18px; height: 18px; flex: none; border-radius: 50%;
+               background: radial-gradient(circle at 35% 35%, #fff2b8 0 18%, var(--gold) 20% 62%, var(--gold-deep) 64%); box-shadow: inset 0 0 0 2px var(--gold-deep); }
+  .icon-btn { pointer-events: auto; width: 46px; height: 46px; flex: none; border-radius: 14px; border: 3px solid var(--ink); background: var(--paper);
+              box-shadow: 0 3px 0 var(--ink); display: grid; place-items: center; cursor: pointer; padding: 0; }
+  .icon-btn svg { width: 20px; height: 20px; fill: var(--ink); }
+  .icon-btn:active { transform: translateY(3px); box-shadow: none; }
+  .hud-tools { display: flex; gap: 8px; }
+  #taunt { margin: 14px auto 0; width: fit-content; max-width: 92%; text-align: center; font-family: var(--font-display); font-weight: 800; font-size: 20px;
+           line-height: 1.15; color: #fff; -webkit-text-stroke: 4px var(--ink); paint-order: stroke fill; text-shadow: 0 3px 0 var(--ink); transform: rotate(-2deg); }
+  #tip { position: absolute; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 92px); transform: translateX(-50%); width: max-content; max-width: 90%;
+         background: var(--paper); border: 3px solid var(--ink); border-radius: 14px; box-shadow: 0 4px 0 var(--ink); padding: 8px 14px;
+         font-weight: 800; font-size: 16px; text-align: center; }
+  #popups { position: fixed; inset: 0; pointer-events: none; }
+  .pop { position: absolute; transform: translate(-50%, -50%); font-family: var(--font-display); font-weight: 800; font-size: 34px; color: #fff;
+         -webkit-text-stroke: 5px var(--ink); paint-order: stroke fill; animation: pop 0.9s ease-out forwards; white-space: nowrap; }
+  .pop.good { color: #7dffb0; } .pop.bad { color: #ff8a80; } .pop.gold { color: #ffd34d; } .pop.purple { color: #d4b8ff; }
+  @keyframes pop { 0% { opacity: 0; transform: translate(-50%, -30%) scale(0.6); } 20% { opacity: 1; transform: translate(-50%, -60%) scale(1.15); }
+                   100% { opacity: 0; transform: translate(-50%, -160%) scale(1); } }
+
+  /* FAIL stamp, like the ads */
+  #fail { position: fixed; left: 50%; top: 38%; transform: translate(-50%, -50%) rotate(-12deg); pointer-events: none;
+          font-family: var(--font-display); font-weight: 800; font-size: clamp(70px, 24vw, 130px); line-height: 1; color: var(--red);
+          -webkit-text-stroke: 7px #fff; paint-order: stroke fill; border: 10px solid var(--red); border-radius: 26px; padding: 6px 26px 0;
+          background: rgba(255, 255, 255, 0.82); animation: stamp 0.35s cubic-bezier(.2,1.6,.4,1) both; }
+  @keyframes stamp { from { opacity: 0; transform: translate(-50%, -50%) rotate(-12deg) scale(2.4); } to { opacity: 1; transform: translate(-50%, -50%) rotate(-12deg) scale(1); } }
+
+  /* ---------- screens ---------- */
+  .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+            padding-block: calc(env(safe-area-inset-top, 0px) + 20px) calc(env(safe-area-inset-bottom, 0px) + 20px);
+            padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); overflow-y: auto; }
+  .screen-dim { background: rgba(43, 33, 64, 0.42); }
+  #screen-home { background: linear-gradient(180deg, rgba(191,224,255,0.25), rgba(191,224,255,0.55) 45%, rgba(255,247,239,0.35)); }
+  .card { width: min(100%, 380px); background: var(--paper); border: 3px solid var(--ink); border-radius: 24px; box-shadow: 0 6px 0 var(--ink);
+          padding: 22px 18px; display: flex; flex-direction: column; gap: 14px; align-items: stretch; text-align: center; }
+  .card h2 { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 34px; line-height: 1; }
+  .card p { margin: 0; font-weight: 700; color: var(--ink-soft); text-wrap: balance; }
+  .ad-tag { display: inline-block; align-self: center; font-weight: 800; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; background: var(--gold);
+            color: var(--ink); border: 3px solid var(--ink); border-radius: 8px; padding: 2px 8px; transform: rotate(-3deg); }
+  .logo { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: clamp(46px, 14vw, 74px); line-height: 0.86; text-align: center; color: #fff;
+          -webkit-text-stroke: 4px var(--ink); paint-order: stroke fill; text-shadow: 0 6px 0 var(--ink); transform: rotate(-3deg); }
+  .logo .strike { position: relative; display: inline-block; color: var(--red); }
+  .logo .strike::after { content: ""; position: absolute; left: -4%; right: -4%; top: 50%; height: 8px; background: var(--ink); border-radius: 9px; transform: rotate(-8deg); }
+  .logo .tower { display: block; margin-top: 8px; font-size: 0.62em; color: var(--gold); letter-spacing: 0.04em; }
+  .tagline { margin: 0; max-width: 30ch; text-align: center; font-weight: 800; font-size: 16px; color: var(--ink); background: var(--paper);
+             border: 3px solid var(--ink); border-radius: 12px; padding: 6px 12px; text-wrap: balance; }
+  .home-bottom { width: min(100%, 380px); display: flex; flex-direction: column; gap: 12px; margin-top: 6vh; }
+  .home-top { position: fixed; z-index: 2; top: calc(env(safe-area-inset-top, 0px) + 12px); left: max(16px, env(safe-area-inset-left, 0px));
+              right: max(16px, env(safe-area-inset-right, 0px)); display: flex; justify-content: space-between; align-items: center; }
+  .btn { font-family: var(--font-display); font-weight: 800; font-size: 24px; line-height: 1; border: 3px solid var(--ink); border-radius: 18px; padding: 16px 20px 13px;
+         cursor: pointer; color: #fff; background: var(--blue); box-shadow: inset 0 -5px 0 var(--blue-deep), 0 4px 0 var(--ink); }
+  .btn:active { transform: translateY(3px); box-shadow: inset 0 -3px 0 var(--blue-deep), 0 1px 0 var(--ink); }
+  .btn-big { font-size: 32px; padding: 20px; }
+  .btn-green { background: var(--green); box-shadow: inset 0 -5px 0 var(--green-deep), 0 4px 0 var(--ink); }
+  .btn-gold { background: var(--gold); color: var(--ink); box-shadow: inset 0 -5px 0 var(--gold-deep), 0 4px 0 var(--ink); }
+  .btn-plain { background: var(--paper); color: var(--ink); box-shadow: inset 0 -5px 0 var(--line), 0 4px 0 var(--ink); }
+  .btn:focus-visible, .icon-btn:focus-visible { outline: 3px solid var(--lilac); outline-offset: 3px; }
+  .won-coins { display: flex; justify-content: center; align-items: center; gap: 8px; font-family: var(--font-display); font-weight: 800; font-size: 40px; }
+  .won-coins .coin-icon { width: 30px; height: 30px; }
+  .rules { display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; text-align: left; font-weight: 700; font-size: 15px; align-items: center; }
+  .rules b { font-family: var(--font-display); font-size: 20px; text-align: center; min-width: 46px; border: 3px solid var(--ink); border-radius: 10px; padding: 0 6px; color: #fff;
+             -webkit-text-stroke: 3px var(--ink); paint-order: stroke fill; }
+  .r-enemy { background: #ff8f84; } .r-sword { background: #6fe0a0; } .r-potion { background: #b99cff; } .r-trap { background: #ffb766; } .r-boss { background: var(--red); } .r-curse { background: #9b6cff; } .r-shield { background: #9fb0c8; } .r-key { background: var(--gold); }
+
+  /* ---------- shop ---------- */
+  .shop-card { gap: 12px; }
+  .shop-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .shop-head h2 { text-align: left; }
+  .tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; background: var(--line); border: 3px solid var(--ink); border-radius: 14px; padding: 4px; }
+  .tabs button { font-family: var(--font-display); font-weight: 800; font-size: 16px; color: var(--ink-soft); background: transparent; border: 0; border-radius: 10px; padding: 8px 4px 6px; cursor: pointer; }
+  .tabs button[aria-selected="true"] { background: var(--paper); color: var(--ink); box-shadow: 0 2px 0 var(--ink); }
+  .tabs button:focus-visible { outline: 3px solid var(--lilac); outline-offset: 2px; }
+  #shop-list { list-style: none; margin: 0; padding: 0 2px 0 0; display: flex; flex-direction: column; gap: 10px; max-height: min(52vh, 420px); overflow-y: auto; text-align: left; }
+  .row { display: flex; align-items: center; gap: 10px; border: 3px solid var(--ink); border-radius: 18px; background: #fff; padding: 10px 10px 10px 12px; }
+  .row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .row h3 { margin: 0; font-family: var(--font-display); font-size: 20px; line-height: 1.15; }
+  .row p { margin: 0; font-size: 13px; font-weight: 700; color: var(--ink-soft); line-height: 1.3; }
+  .row p.next { color: var(--blue-deep); }
+  .lvl-tag { font-family: var(--font-body); font-size: 12px; font-weight: 800; color: #fff; background: var(--blue); border-radius: 6px; padding: 1px 6px; vertical-align: 3px; }
+  .btn-buy { font-size: 19px; padding: 11px 10px 9px; flex: none; min-width: 92px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+  .btn:disabled { opacity: 0.5; cursor: default; transform: none; }
+  .swatch { flex: none; width: 44px; height: 44px; border-radius: 50%; border: 3px solid var(--ink);
+            background: radial-gradient(circle at 50% 30%, var(--h) 0 22%, transparent 23%), radial-gradient(circle at 50% 22%, var(--c) 0 30%, transparent 31%), linear-gradient(var(--b), var(--b)); }
+  .icon-tile { flex: none; width: 44px; height: 44px; border-radius: 12px; border: 3px solid var(--ink); display: grid; place-items: center;
+               font-family: var(--font-display); font-weight: 800; font-size: 18px; color: #fff; -webkit-text-stroke: 3px var(--ink); paint-order: stroke fill; }
+  .tile-power { background: #6fe0a0; } .tile-income { background: var(--gold); } .tile-hint { background: #fff2b8; }
+  .tile-hint svg { width: 22px; height: 22px; fill: var(--ink); }
+  .badge { position: absolute; top: -8px; right: -8px; min-width: 22px; height: 22px; border-radius: 11px; background: var(--red); color: #fff; border: 2px solid var(--ink);
+           font-family: var(--font-display); font-weight: 800; font-size: 13px; line-height: 19px; padding: 0 5px; text-align: center; }
+  .icon-btn { position: relative; }
+  .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  /* ---------- stars, toggles, boss banner ---------- */
+  .stars { display: flex; justify-content: center; align-items: flex-end; gap: 6px; margin: -4px 0 2px; }
+  .star { width: 62px; height: 62px; opacity: 0.25; transform: scale(0.85); }
+  .star:nth-child(2) { width: 80px; height: 80px; }
+  .star path { fill: var(--line); stroke: var(--ink); stroke-width: 2.4; stroke-linejoin: round; }
+  .star.on { opacity: 1; animation: star-in 0.45s cubic-bezier(.2,1.8,.4,1) both; }
+  .star.on path { fill: var(--gold); }
+  @keyframes star-in { from { transform: scale(2.2) rotate(-30deg); opacity: 0; } to { transform: scale(1) rotate(0); opacity: 1; } }
+  .stars-note { font-size: 13px; }
+  .top-tools { display: flex; gap: 8px; }
+  .icon-btn.off { opacity: 0.55; }
+  .icon-btn.off::after { content: ""; position: absolute; left: 8px; right: 8px; top: 50%; height: 3px; background: var(--ink); border-radius: 2px; transform: rotate(-40deg); }
+  #boss-banner { position: fixed; left: 0; right: 0; top: 36%; pointer-events: none; text-align: center; font-family: var(--font-display); font-weight: 800;
+                 font-size: clamp(44px, 15vw, 80px); color: #fff; -webkit-text-stroke: 6px var(--ink); paint-order: stroke fill; letter-spacing: 0.04em;
+                 background: linear-gradient(90deg, transparent, var(--band, rgba(109, 63, 184, 0.85)) 15%, var(--band, rgba(109, 63, 184, 0.85)) 85%, transparent); padding: 6px 0 0;
+                 animation: banner 1.1s ease-in-out both; }
+  @keyframes banner { 0% { transform: translateX(-110%); } 22%, 78% { transform: translateX(0); } 100% { transform: translateX(110%); } }
+
+  /* ---------- level map ---------- */
+  #map-grid { list-style: none; margin: 0; padding: 4px 2px 4px 0; display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; max-height: min(56vh, 460px); overflow-y: auto; }
+  .lv { width: 100%; aspect-ratio: 1; border: 3px solid var(--ink); border-radius: 14px; background: #fff; box-shadow: 0 3px 0 var(--ink); cursor: pointer; padding: 0;
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; font-family: var(--font-display); font-weight: 800; font-size: 20px; color: var(--ink); line-height: 1; }
+  .lv:active:not(:disabled) { transform: translateY(3px); box-shadow: none; }
+  .lv small { font-size: 11px; letter-spacing: 1px; color: var(--gold-deep); min-height: 12px; }
+  .lv small i { font-style: normal; color: var(--line); }
+  .lv.current { background: var(--green); color: #fff; }
+  .lv.current small { color: #fff; }
+  .lv.boss { background: #efe6ff; }
+  .lv:disabled { background: var(--line); color: var(--ink-soft); box-shadow: none; opacity: 0.7; cursor: default; font-size: 16px; }
+  .map-world { grid-column: 1 / -1; font-family: var(--font-display); font-weight: 800; font-size: 18px; text-align: left; padding: 6px 2px 0; }
+  .lv:focus-visible { outline: 3px solid var(--lilac); outline-offset: 2px; }
+
+  /* ---------- intro "ad", daily reward ---------- */
+  #ad-ribbon { position: fixed; left: max(16px, env(safe-area-inset-left, 0px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 24px); transform: rotate(-3deg); font-size: 16px; z-index: 3; pointer-events: none; }
+  #finger { position: fixed; z-index: 4; font-size: 56px; line-height: 1; pointer-events: none; transform: translate(-30%, 10%); transition: left 0.45s ease, top 0.45s ease;
+            filter: drop-shadow(0 3px 0 rgba(43,33,64,0.6)); }
+  #finger.tap { animation: tap 0.25s ease-in-out; }
+  @keyframes tap { 50% { transform: translate(-30%, 10%) scale(0.8); } }
+  .days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .day { border: 3px solid var(--ink); border-radius: 10px; background: #fff; padding: 4px 0 3px; display: flex; flex-direction: column; align-items: center; gap: 1px;
+         font-family: var(--font-display); font-weight: 800; font-size: 13px; line-height: 1.1; }
+  .day small { font-family: var(--font-body); font-size: 10px; color: var(--ink-soft); }
+  .day.done { background: #c9f2da; }
+  .day.today { background: var(--gold); transform: scale(1.08); box-shadow: 0 3px 0 var(--ink); }
+
+  /* ---------- rewarded ads ---------- */
+  .screen-ad { background: rgba(20, 14, 32, 0.82); z-index: 20; }
+  .ad-count { font-family: var(--font-display); font-weight: 800; font-size: 26px; color: var(--ink) !important; }
+  .btn-ad { background: #7a5cf0; box-shadow: inset 0 -5px 0 #5a3fc8, 0 4px 0 var(--ink); }
+  .btn-ad:active:not(:disabled) { box-shadow: inset 0 -3px 0 #5a3fc8, 0 1px 0 var(--ink); }
+  .tv { display: inline-block; margin-right: 6px; }
+
+  /* ---------- treasure tower ---------- */
+  .chests { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .chest { aspect-ratio: 1; border: 3px solid var(--ink); border-radius: 16px; cursor: pointer; padding: 0; position: relative; box-shadow: 0 4px 0 var(--ink);
+           background: linear-gradient(180deg, #b0743f 0 42%, var(--gold) 42% 52%, #8a5a32 52%); font-family: var(--font-display); font-weight: 800; font-size: 22px; color: var(--ink); }
+  .chest::after { content: ""; position: absolute; left: 50%; top: 40%; width: 16px; height: 20px; margin-left: -8px; border-radius: 4px; background: var(--gold); border: 3px solid var(--ink); }
+  .chest:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); }
+  .chest.open { background: #fff7d6; animation: pop-open 0.35s cubic-bezier(.2,1.7,.4,1); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; cursor: default; }
+  .chest.open::after { display: none; }
+  .chest.open .coin-icon { width: 24px; height: 24px; }
+  .chest.big { background: #ffe07a; }
+  .chest:disabled:not(.open) { opacity: 0.6; cursor: default; }
+  @keyframes pop-open { from { transform: scale(0.6) rotate(-8deg); } to { transform: scale(1); } }
+  .keys-row { font-size: 26px; letter-spacing: 4px; min-height: 32px; }
+  .keys-row .used { opacity: 0.2; filter: grayscale(1); }
+
+  /* ---------- achievements, settings ---------- */
+  #ach-list { list-style: none; margin: 0; padding: 0 2px 0 0; display: flex; flex-direction: column; gap: 8px; max-height: min(56vh, 460px); overflow-y: auto; text-align: left; }
+  .bar { height: 10px; border-radius: 6px; background: var(--line); border: 2px solid var(--ink); overflow: hidden; margin-top: 3px; }
+  .bar i { display: block; height: 100%; background: var(--green); }
+  .row.claimed { opacity: 0.6; }
+  .set-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 3px solid var(--ink); border-radius: 16px; background: #fff; padding: 8px 8px 8px 14px;
+             font-family: var(--font-display); font-weight: 800; font-size: 19px; text-align: left; }
+  .set-row .btn { font-size: 17px; padding: 9px 12px 7px; min-width: 104px; }
+  .btn-danger { background: var(--red); box-shadow: inset 0 -5px 0 var(--red-deep), 0 4px 0 var(--ink); }
+  .version { font-size: 12px !important; }
+
+  @media (max-width: 370px) {
+    .hud-row .icon-btn { width: 40px; height: 40px; border-radius: 12px; }
+    .hud-row .chip { font-size: 16px; padding: 2px 8px 2px 4px; }
+    .hud-row .chip-level { padding: 2px 8px; }
+    .hud-row, .hud-tools { gap: 6px; }
+    .top-tools .icon-btn { width: 42px; height: 42px; }
+    #hud .hud-row > .chip:first-child { display: none; }
+  }
+
+  /* ---------- boosters ---------- */
+  #boosts { position: absolute; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); transform: translateX(-50%); display: flex; gap: 14px; pointer-events: auto; }
+  .boost { position: relative; width: 58px; height: 58px; border-radius: 50%; border: 3px solid var(--ink); background: var(--paper); box-shadow: 0 4px 0 var(--ink);
+           font-size: 28px; line-height: 1; cursor: pointer; padding: 0; display: grid; place-items: center; }
+  .boost:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); }
+  .boost.on { background: var(--gold); box-shadow: 0 0 0 4px #fff, 0 4px 0 var(--ink); }
+  .boost .badge { top: -6px; right: -6px; background: var(--blue); }
+  .boost:focus-visible { outline: 3px solid var(--lilac); outline-offset: 3px; }
+  .dt-btn { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 16px 10px; }
+  .dt-btn small { font-family: var(--font-body); font-size: 13px; font-weight: 800; opacity: 0.9; }
+
+  /* cross-promotion card */
+  .promo { display: flex; align-items: center; gap: 12px; width: 100%; border: 3px solid var(--ink); border-radius: 18px; background: var(--paper); box-shadow: 0 4px 0 var(--ink);
+           padding: 8px 12px 8px 8px; cursor: pointer; text-align: left; color: var(--ink); font-family: var(--font-body); }
+  .promo:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); }
+  .promo img { width: 52px; height: 52px; border-radius: 13px; border: 2px solid var(--ink); flex: none; }
+  .promo-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .promo-text b { font-family: var(--font-display); font-size: 19px; line-height: 1.1; }
+  .promo-text small { font-size: 13px; font-weight: 800; color: var(--ink-soft); }
+  .promo-go { font-family: var(--font-display); font-weight: 800; font-size: 15px; color: #fff; background: var(--blue); border: 2px solid var(--ink); border-radius: 10px; padding: 4px 10px 2px; flex: none; }
+  .promo-go.soon { background: var(--gold); color: var(--ink); }
+  .promo:focus-visible { outline: 3px solid var(--lilac); outline-offset: 3px; }
+
+  /* weekly event strip */
+  .event-strip { display: flex; align-items: center; gap: 10px; width: 100%; border: 3px solid var(--ink); border-radius: 16px; background: #fff2b8; box-shadow: 0 3px 0 var(--ink);
+                 padding: 6px 10px; cursor: pointer; text-align: left; color: var(--ink); font-family: var(--font-body); }
+  .event-strip:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
+  .event-strip.ready { background: var(--gold); animation: nudge 1.4s ease-in-out infinite; }
+  @keyframes nudge { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.03); } }
+  .ev-icon { font-size: 24px; }
+  .ev-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .ev-text b { font-family: var(--font-display); font-size: 17px; line-height: 1.1; }
+  .ev-text small { font-size: 12px; font-weight: 800; color: var(--ink-soft); }
+  .ev-goal { font-family: var(--font-display); font-weight: 800; font-size: 14px; text-align: right; white-space: nowrap; }
+  .event-strip:focus-visible { outline: 3px solid var(--lilac); outline-offset: 3px; }
+
+  .btn-stack { display: flex; flex-direction: column; gap: 6px; align-items: stretch; flex: none; }
+  .btn-try { font-size: 15px; padding: 6px 8px 4px; }
+  .try-tag { font-family: var(--font-display); font-weight: 800; font-size: 13px; color: #5a3fc8; text-align: center; }
+  .trial-offer { text-align: left; }
+</style>
+
+<canvas id="game" aria-label="Not a Fake Ad: Tower"></canvas>
+
+<div id="hud" hidden>
+  <div class="hud-row">
+    <span class="chip"><span class="coin-icon" aria-hidden="true"></span><span id="hud-coins">0</span></span>
+    <span class="chip chip-level" id="hud-level">Level 1</span>
+    <div class="hud-tools">
+      <button class="icon-btn" id="btn-home" type="button" aria-label="Home" data-i18n-label="home">
+        <svg viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-5v-6h-2v6H6v-9H3z"/></svg>
+      </button>
+      <button class="icon-btn" id="btn-hint" type="button" aria-label="Hint" data-i18n-label="hint">
+        <svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-4 12.7V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.3A7 7 0 0 0 12 2zm-3 18h6v1a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1z"/></svg>
+        <span class="badge" id="hint-count">3</span>
+      </button>
+      <button class="icon-btn" id="btn-restart" type="button" aria-label="Restart" data-i18n-label="restart">
+        <svg viewBox="0 0 24 24"><path d="M12 5V2L7 6l5 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/></svg>
+      </button>
+    </div>
+  </div>
+  <div id="taunt"></div>
+  <div id="tip" hidden></div>
+  <div id="boosts">
+    <button class="boost" id="boost-shield" type="button" aria-label="Shield" data-i18n-label="boost.shield">🛡️<span class="badge" id="bc-shield">1</span></button>
+    <button class="boost" id="boost-scope" type="button" aria-label="Scope" data-i18n-label="boost.scope">🔭<span class="badge" id="bc-scope">1</span></button>
+    <button class="boost" id="boost-bomb" type="button" aria-label="Bomb" data-i18n-label="boost.bomb">💣<span class="badge" id="bc-bomb">1</span></button>
+  </div>
+</div>
+<div id="popups"></div>
+<div id="fail" hidden>FAIL</div>
+<div id="boss-banner" hidden>BOSS</div>
+<span id="ad-ribbon" class="ad-tag" data-i18n="ad" hidden>Ad</span>
+<div id="finger" aria-hidden="true" hidden>👆</div>
+
+<section id="screen-home" class="screen">
+  <div class="home-top">
+    <span class="chip"><span class="coin-icon" aria-hidden="true"></span><span id="home-coins">0</span></span>
+    <div class="top-tools">
+      <button class="icon-btn" id="btn-ach" type="button" aria-label="Achievements" data-i18n-label="ach.title">
+        <svg viewBox="0 0 24 24"><path d="M7 3h10v2h3v3a4 4 0 0 1-4 4h-.3A5 5 0 0 1 13 14.9V17h3v4H8v-4h3v-2.1A5 5 0 0 1 8.3 12H8a4 4 0 0 1-4-4V5h3zm-1 4v1a2 2 0 0 0 1 1.7V7zm12 0v2.7A2 2 0 0 0 18 8V7z"/></svg>
+        <span class="badge" id="ach-badge" hidden>!</span>
+      </button>
+      <button class="icon-btn" id="btn-how" type="button" aria-label="How to play" data-i18n-label="how"><b style="font-family:var(--font-display);font-size:22px">?</b></button>
+      <button class="icon-btn" id="btn-settings" type="button" aria-label="Settings" data-i18n-label="settings">
+        <svg viewBox="0 0 24 24"><path d="M10.3 2h3.4l.5 2.6 1.6.9 2.5-.9 1.7 2.9-2 1.8v1.8l2 1.8-1.7 2.9-2.5-.9-1.6.9-.5 2.6h-3.4l-.5-2.6-1.6-.9-2.5.9-1.7-2.9 2-1.8v-1.8l-2-1.8 1.7-2.9 2.5.9 1.6-.9zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>
+      </button>
+    </div>
+  </div>
+  <span class="ad-tag" data-i18n="sponsored">Sponsored?</span>
+  <h1 class="logo">Not a<br><span class="strike">Fake</span> Ad<span class="tower">TOWER</span></h1>
+  <p class="tagline" data-i18n="tagline">The tower game from those ads. Actually playable.</p>
+  <div class="home-bottom">
+    <button class="event-strip" id="event-strip" type="button">
+      <span class="ev-icon" aria-hidden="true">🎉</span>
+      <span class="ev-text"><b id="ev-title">Potion week</b><small id="ev-desc"></small></span>
+      <span class="ev-goal" id="ev-goal"></span>
+    </button>
+    <button class="btn btn-ad dt-btn" id="btn-dtower" type="button"><span data-i18n="dt.btn">📅 Daily tower</span><small id="dt-sub"></small></button>
+    <button class="btn btn-big btn-green" id="btn-play" type="button">Play</button>
+    <div class="btn-row">
+      <button class="btn btn-gold" id="btn-shop" type="button" data-i18n="shop">Shop</button>
+      <button class="btn btn-plain" id="btn-map" type="button" data-i18n="levels">Levels</button>
+    </div>
+    <button class="promo" id="btn-promo" type="button">
+      <img id="promo-img" alt="">
+      <span class="promo-text"><b>Not a Fake Ad</b><small data-i18n="promo.sub">The first game of the series</small></span>
+      <span class="promo-go" data-i18n="promo.go">Play</span>
+    </button>
+  </div>
+</section>
+
+<section id="screen-how" class="screen screen-dim" hidden>
+  <div class="card">
+    <h2 data-i18n="how">How to play</h2>
+    <p data-i18n="how.lede">Tap a tower: your hero enters its lowest floor. Clear every floor to win.</p>
+    <div class="rules">
+      <b class="r-enemy">12</b><span data-i18n="how.enemy">Enemy: you must be stronger. You absorb its power.</span>
+      <b class="r-sword">+8</b><span data-i18n="how.sword">Sword: adds power.</span>
+      <b class="r-potion">x2</b><span data-i18n="how.potion">Potion: doubles your power. Drink it when you are big.</span>
+      <b class="r-trap">-9</b><span data-i18n="how.trap">Trap: takes power. Don't step in when you are small.</span>
+      <b class="r-boss">80</b><span data-i18n="how.boss">Boss: the strongest one, always on top.</span>
+      <b class="r-shield">2×9</b><span data-i18n="how.shield">Shield bearer: you must be more than twice as strong.</span>
+      <b class="r-curse">-50%</b><span data-i18n="how.curse">Curse: halves your power.</span>
+      <b class="r-key">🔑</b><span data-i18n="how.key">Key and door: grab the key first, then open the locked door.</span>
+    </div>
+    <button class="btn" id="btn-how-close" type="button" data-i18n="ok">Got it</button>
+  </div>
+</section>
+
+<section id="screen-shop" class="screen screen-dim" hidden>
+  <div class="card shop-card">
+    <div class="shop-head">
+      <h2 data-i18n="shop">Shop</h2>
+      <span class="chip"><span class="coin-icon" aria-hidden="true"></span><span id="shop-coins">0</span></span>
+    </div>
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" data-tab="power" aria-selected="true" data-i18n="tab.power">Power</button>
+      <button type="button" role="tab" data-tab="heroes" aria-selected="false" data-i18n="tab.heroes">Heroes</button>
+      <button type="button" role="tab" data-tab="hints" aria-selected="false" data-i18n="tab.hints">Hints</button>
+    </div>
+    <ul id="shop-list"></ul>
+    <button id="btn-shop-back" class="btn btn-plain" type="button" data-i18n="back">Back</button>
+  </div>
+</section>
+
+<section id="screen-map" class="screen screen-dim" hidden>
+  <div class="card">
+    <div class="shop-head">
+      <h2 data-i18n="levels">Levels</h2>
+      <span class="chip"><span aria-hidden="true" style="color:var(--gold-deep)">★</span><span id="map-stars">0</span></span>
+    </div>
+    <ul id="map-grid"></ul>
+    <button id="btn-map-back" class="btn btn-plain" type="button" data-i18n="back">Back</button>
+  </div>
+</section>
+
+<section id="screen-intro" class="screen screen-dim" hidden>
+  <div class="card">
+    <span class="ad-tag" data-i18n="intro.tag">This was the ad</span>
+    <h2 data-i18n="intro.title">He lost. Again.</h2>
+    <p data-i18n="intro.body"></p>
+    <button class="btn btn-big btn-green" id="btn-intro-go" type="button" data-i18n="intro.go">Let me do it</button>
+  </div>
+</section>
+
+<section id="screen-daily" class="screen screen-dim" hidden>
+  <div class="card">
+    <span class="ad-tag" data-i18n="daily.tag">Free</span>
+    <h2 data-i18n="daily.title">Daily reward</h2>
+    <p data-i18n="daily.body">Come back every day and it grows.</p>
+    <div class="days" id="days"></div>
+    <div class="won-coins"><span class="coin-icon" aria-hidden="true"></span><span id="daily-amount">+30</span></div>
+    <button class="btn btn-big btn-green" id="btn-daily" type="button" data-i18n="daily.claim">Claim</button>
+  </div>
+</section>
+
+<section id="screen-ad" class="screen screen-ad" hidden>
+  <div class="card">
+    <span class="ad-tag" data-i18n="ad.tag">Ad</span>
+    <h2 data-i18n="ad.title">Your ad here</h2>
+    <p id="ad-line"></p>
+    <p id="ad-count" class="ad-count"></p>
+    <button id="ad-close" class="btn btn-plain" type="button">Skip</button>
+  </div>
+</section>
+
+<section id="screen-treasure" class="screen screen-dim" hidden>
+  <div class="card">
+    <span class="ad-tag" data-i18n="treasure.tag">Bonus</span>
+    <h2 data-i18n="treasure.title">Treasure Tower</h2>
+    <p data-i18n="treasure.body">You have 3 keys. Open any chests you like.</p>
+    <div class="keys-row" id="t-keys" aria-live="polite"></div>
+    <div class="chests" id="chests"></div>
+    <button class="btn btn-ad" id="btn-t-ad" type="button" hidden><span class="tv" aria-hidden="true">📺</span><span data-i18n="treasure.more">+3 keys</span></button>
+    <button class="btn btn-big btn-green" id="btn-t-done" type="button" data-i18n="treasure.done">Continue</button>
+  </div>
+</section>
+
+<section id="screen-ach" class="screen screen-dim" hidden>
+  <div class="card">
+    <div class="shop-head">
+      <h2 data-i18n="ach.title">Achievements</h2>
+      <span class="chip"><span class="coin-icon" aria-hidden="true"></span><span id="ach-coins">0</span></span>
+    </div>
+    <ul id="ach-list"></ul>
+    <button id="btn-ach-back" class="btn btn-plain" type="button" data-i18n="back">Back</button>
+  </div>
+</section>
+
+<section id="screen-settings" class="screen screen-dim" hidden>
+  <div class="card">
+    <h2 data-i18n="settings">Settings</h2>
+    <div class="set-row"><span data-i18n="set.lang">Language</span><button class="btn btn-plain" id="btn-lang" type="button">English</button></div>
+    <div class="set-row"><span data-i18n="sound">Sound</span><button class="btn btn-plain" id="btn-sound" type="button">On</button></div>
+    <div class="set-row"><span data-i18n="music">Music</span><button class="btn btn-plain" id="btn-music" type="button">On</button></div>
+    <div class="set-row"><span data-i18n="set.vibrate">Vibration</span><button class="btn btn-plain" id="btn-vibrate" type="button">On</button></div>
+    <div class="set-row"><span data-i18n="set.notify">Notifications</span><button class="btn btn-plain" id="btn-notify" type="button">On</button></div>
+    <div class="set-row"><span data-i18n="set.reset">Reset progress</span><button class="btn btn-danger" id="btn-reset" type="button" data-i18n="set.resetBtn">Reset</button></div>
+    <p class="version"><a href="https://nimoriq.com/nfa-tower-privacy/" id="link-privacy" data-i18n="set.privacy">Privacy</a> · <a href="https://nimoriq.com/nfa-tower-support/" id="link-support" data-i18n="set.support">Support</a></p>
+    <p class="version">Not a Fake Ad: Tower · v0.1.0 · Nimoriq</p>
+    <button id="btn-settings-back" class="btn btn-plain" type="button" data-i18n="back">Back</button>
+  </div>
+</section>
+
+<section id="screen-won" class="screen screen-dim" hidden>
+  <div class="card">
+    <span class="ad-tag" data-i18n="notfake">Not fake</span>
+    <div class="stars" id="stars"><svg class="star" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 4l6 13 14 1.6-10.5 9.6 3 14L24 35l-12.5 7.2 3-14L4 18.6 18 17z"/></svg><svg class="star" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 4l6 13 14 1.6-10.5 9.6 3 14L24 35l-12.5 7.2 3-14L4 18.6 18 17z"/></svg><svg class="star" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 4l6 13 14 1.6-10.5 9.6 3 14L24 35l-12.5 7.2 3-14L4 18.6 18 17z"/></svg></div>
+    <h2 id="won-title">Level 1 cleared!</h2>
+    <p id="won-line"></p>
+    <p class="stars-note" id="stars-note"></p>
+    <div class="won-coins"><span class="coin-icon" aria-hidden="true"></span><span id="won-coins">+20</span></div>
+    <div class="row trial-offer" id="trial-offer" hidden>
+      <span class="swatch" id="trial-swatch" aria-hidden="true"></span>
+      <div class="row-text"><h3 id="trial-name">Ninja</h3><p id="trial-line"></p></div>
+      <button class="btn btn-buy btn-gold" id="btn-trial-buy" type="button">0</button>
+    </div>
+    <button class="btn btn-ad" id="btn-double" type="button"><span class="tv" aria-hidden="true">📺</span><span data-i18n="ad.double">Double coins</span></button>
+    <button class="btn btn-big btn-green" id="btn-next" type="button" data-i18n="next">Next level</button>
+    <button class="btn btn-gold" id="btn-won-shop" type="button" data-i18n="shop">Shop</button>
+  </div>
+</section>
+
+<section id="screen-lost" class="screen screen-dim" hidden>
+  <div class="card">
+    <h2 data-i18n="lost.title">Just like the ad!</h2>
+    <p id="lost-line"></p>
+    <button class="btn btn-gold" id="btn-undo" type="button">Undo last move</button>
+    <button class="btn btn-big btn-green" id="btn-retry" type="button" data-i18n="retry">Try again</button>
+  </div>
+</section>
+
+<!--GAME_SCRIPT-->
