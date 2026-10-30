@@ -105,7 +105,7 @@
   .shop-card { gap: 12px; }
   .shop-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
   .shop-head h2 { text-align: left; }
-  .tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; background: var(--line); border: 3px solid var(--ink); border-radius: 14px; padding: 4px; }
+  .tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; background: var(--line); border: 3px solid var(--ink); border-radius: 14px; padding: 4px; }
   .tabs button { font-family: var(--font-display); font-weight: 800; font-size: 16px; color: var(--ink-soft); background: transparent; border: 0; border-radius: 10px; padding: 8px 4px 6px; cursor: pointer; }
   .tabs button[aria-selected="true"] { background: var(--paper); color: var(--ink); box-shadow: 0 2px 0 var(--ink); }
   .tabs button:focus-visible { outline: 3px solid var(--lilac); outline-offset: 2px; }
@@ -415,6 +415,7 @@
       <button type="button" role="tab" data-tab="power" aria-selected="true" data-i18n="tab.power">Power</button>
       <button type="button" role="tab" data-tab="heroes" aria-selected="false" data-i18n="tab.heroes">Heroes</button>
       <button type="button" role="tab" data-tab="hints" aria-selected="false" data-i18n="tab.hints">Hints</button>
+      <button type="button" role="tab" data-tab="store" aria-selected="false" data-i18n="iap.title">Store</button>
     </div>
     <ul id="shop-list"></ul>
     <button id="btn-shop-back" class="btn btn-plain" type="button" data-i18n="back">Back</button>
@@ -600,6 +601,17 @@
     <p id="lost-line"></p>
     <button class="btn btn-gold" id="btn-undo" type="button">Undo last move</button>
     <button class="btn btn-big btn-green" id="btn-retry" type="button" data-i18n="retry">Try again</button>
+  </div>
+</section>
+
+<section id="screen-pay" class="screen screen-dim" style="z-index:40" hidden>
+  <div class="card">
+    <span class="ad-tag" data-i18n="pay.tag">Test purchase</span>
+    <h2 id="pay-title">Product</h2>
+    <div class="won-coins"><span id="pay-price">$0.99</span></div>
+    <p data-i18n="pay.note">Test build: nothing is charged.</p>
+    <button class="btn btn-big btn-green" id="pay-confirm" type="button" data-i18n="pay.confirm">Buy</button>
+    <button class="btn btn-plain" id="pay-cancel" type="button" data-i18n="pay.cancel">Cancel</button>
   </div>
 </section>
 

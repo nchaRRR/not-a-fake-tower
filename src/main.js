@@ -27,6 +27,7 @@ import { towerArt } from './onboard-art.js';
 import promoIcon from '../assets/promo-nfa-128.webp';
 import promoIcon2 from '../assets/promo-choices-128.webp';
 import { createRemote } from './remote.js';
+import { createPayments, PRODUCTS } from './payments.js';
 import { createReview } from './review.js';
 import { makeCard, shareCanvas } from './share.js';
 import { createLeaderboard } from './leaderboard.js';
@@ -42,7 +43,8 @@ import DAILY_TOWERS from './daily.json';
 import { ACHIEVEMENTS, claimable } from './achievements.js';
 import { WORLDS, worldOf, worldIndex } from './worlds.js';
 import { setSongKey } from './music.js';
-const ads = createAds();
+const ads = createAds({ skipAds: () => (save.iap || []).includes('no_ads') });
+const payments = createPayments();
 
 const $ = (id) => document.getElementById(id);
 const save = loadSave();
@@ -1430,6 +1432,33 @@ function renderShop() {
       }
       list.appendChild(li);
     }
+  } else if (shopTab === 'store') {
+    const owned = save.iap || [];
+    for (const [id, p] of Object.entries(PRODUCTS)) {
+      if (p.kind !== 'consumable' && owned.includes(id)) continue;
+      const li = row(t('iap.' + id), `<p>${t('iap.' + id + '.sub')}</p>`, `<span class="icon-tile tile-hint" aria-hidden="true" style="font-size:26px">${p.icon}</span>`);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn btn-buy btn-green';
+      btn.id = 'iap-' + id;
+      btn.textContent = p.price;
+      btn.addEventListener('click', async () => {
+        sfx.tap();
+        if (!(await payments.buy(id))) return;
+        if (p.kind !== 'consumable') save.iap = [...new Set([...(save.iap || []), id])];
+        save.coins += p.coins || 0;
+        save.hints += p.hints || 0;
+        if (p.skin && !save.skins.includes(p.skin)) save.skins.push(p.skin);
+        writeSave(save); updateCoins(); updateHints();
+        sfx.buy();
+        setTip(t('iap.thanks'), 2400);
+        track('purchase', { kind: p.kind, id });
+        renderShop();
+      });
+      li.appendChild(btn);
+      list.appendChild(li);
+    }
+    if (!list.children.length) list.innerHTML = `<li class="row"><div class="row-text"><p>${t('iap.all')}</p></div></li>`;
   } else {
     const bulb = '<svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-4 12.7V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.3A7 7 0 0 0 12 2zm-3 18h6v1a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1z"/></svg>';
     const head = document.createElement('li');
@@ -1798,7 +1827,7 @@ const leaderboard = createLeaderboard({
   boards: [{ id: 'level', label: () => t('lb.board.level') }, { id: 'daily', label: () => t('dt.btn').replace(/^\S+\s/, '') }],
 });
 const review = createReview({ game: 'tower', save, writeSave: () => writeSave(save), t, track, remote, gameName: 'Not a Fake Ad: Tower', canShow: () => state === 'won' && $('screen-account').hidden });
-const inter = createInterstitials({ admob: admobApi, remote, track });
+const inter = createInterstitials({ admob: admobApi, remote, skip: () => (save.iap || []).includes('no_ads'), track });
 const giftCoins = (n, h) => () => { save.coins += n; save.hints += h; updateCoins(); updateHints(); };
 const cross = createCrossRewards({
   save, writeSave: () => writeSave(save), t, sfx, track,
