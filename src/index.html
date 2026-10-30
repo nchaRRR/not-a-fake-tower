@@ -300,6 +300,13 @@
   .screen-account { z-index: 15; }
   .card .lede { margin: 0; text-align: center; font-weight: 700; color: var(--ink-soft); text-wrap: balance; }
   .acc-state { display: block; font-family: var(--font-body); font-size: 12px; font-weight: 800; color: var(--ink-soft); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .promo-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; }
+  .promo-row .promo { padding: 6px 8px; gap: 8px; border-radius: 14px; }
+  .promo-row .promo img { width: 40px; height: 40px; border-radius: 10px; }
+  .promo-row .promo-text b { font-size: 14px; line-height: 1.05; }
+  .promo-row .promo-text small { font-size: 11px; line-height: 1.15; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .promo-row .promo-go { display: none; }
+  @media (max-height: 700px) { #screen-home .tagline { display: none; } }
 </style>
 
 <canvas id="game" aria-label="Not a Fake Ad: Tower"></canvas>
@@ -364,11 +371,18 @@
       <button class="btn btn-gold" id="btn-shop" type="button" data-i18n="shop">Shop</button>
       <button class="btn btn-plain" id="btn-map" type="button" data-i18n="levels">Levels</button>
     </div>
+    <div class="promo-row">
     <button class="promo" id="btn-promo" type="button">
       <img id="promo-img" alt="">
       <span class="promo-text"><b>Not a Fake Ad</b><small data-i18n="promo.sub">The first game of the series</small></span>
       <span class="promo-go" data-i18n="promo.go">Play</span>
     </button>
+    <button class="promo" id="btn-promo2" type="button">
+      <img id="promo-img2" alt="">
+      <span class="promo-text"><b>Not a Fake Ad: Choices</b><small data-i18n="promo.choices">Pick the item that saves him</small></span>
+      <span class="promo-go soon" data-i18n="promo.soon">Soon</span>
+    </button>
+    </div>
   </div>
 </section>
 

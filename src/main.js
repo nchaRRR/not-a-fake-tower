@@ -7,9 +7,13 @@ import { makeCountLabel } from './labels.js';
 import { sfx, unlockAudio, setMuted } from './audio.js';
 import { loadSave, writeSave, freshSave as loadSaveFresh } from './save.js';
 import { track } from './analytics.js';
-import { t, getLang, setLang, applyStatic } from './i18n.js';
+import { startTelemetry } from './telemetry.js';
+import { t, getLang, setLang, applyStatic, nextLang, LANG_NAMES } from './i18n.js';
 import { apply, solve, step, decodeLevel, buildLevel, setEvent, potionMult, swordValue, trapValue } from './rules.js';
 import { currentEvent, WEEK_GOAL, WEEK_REWARD } from './events.js';
+// anonymous play statistics (phone app only)
+startTelemetry({ game: 'tower', version: typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev', enabled: typeof __CLOUD__ !== 'undefined' && __CLOUD__, lang: () => document.documentElement.lang });
+
 const EVENT = currentEvent();
 setEvent(EVENT.id);
 import RAW_LEVELS from './levels.json';
@@ -21,6 +25,7 @@ import { storeLink, openLink } from './promo.js';
 import { runOpening } from './opening.js';
 import { towerArt } from './onboard-art.js';
 import promoIcon from '../assets/promo-nfa-128.webp';
+import promoIcon2 from '../assets/promo-choices-128.webp';
 import { scheduleNotifications, askNotificationPermission, planNotifications } from './notify.js';
 import { dayIndex, dailySpecN, dailySeed } from './daily.js';
 import DAILY_TOWERS from './daily.json';
@@ -1575,6 +1580,8 @@ function refreshDailyButton() {
 }
 on('btn-dtower', () => { sfx.tap(); startDailyTower(); });
 $('promo-img').src = promoIcon;
+$('promo-img2').src = promoIcon2;
+on('btn-promo2', () => { sfx.tap(); track('promo_click', { game: 'choices' }); openLink(storeLink('choices')); });
 on('btn-promo', () => { sfx.tap(); track('promo_click', { game: 'notafakead' }); openLink(storeLink('notafakead')); });
 
 // ---------------------------------------------------------------- daily reward
@@ -1749,7 +1756,7 @@ on('btn-home', () => { if (busy || introAd) return; sfx.tap(); goHome(); });
 // ---------------------------------------------------------------- settings
 const onOff = (v) => t(v ? 'set.on' : 'set.off');
 function refreshToggles() {
-  $('btn-lang').textContent = t('set.langName');
+  $('btn-lang').textContent = LANG_NAMES[getLang()];
   $('btn-sound').textContent = onOff(!save.muted);
   $('btn-music').textContent = onOff(save.music);
   $('btn-vibrate').textContent = onOff(save.vibrate !== false);
@@ -1772,7 +1779,7 @@ const account = createAccount({
 });
 on('btn-account', () => { sfx.tap(); $('screen-settings').hidden = true; account.open('settings'); });
 for (const id of ['link-privacy', 'link-support']) $(id).addEventListener('click', (e) => { e.preventDefault(); openLink($(id).href); });
-on('btn-lang', () => { setLang(getLang() === 'tr' ? 'en' : 'tr'); refreshToggles(); sfx.tap(); });
+on('btn-lang', () => { setLang(nextLang()); refreshToggles(); sfx.tap(); });
 on('btn-sound', () => { save.muted = !save.muted; setMuted(save.muted); writeSave(save); refreshToggles(); sfx.tap(); });
 on('btn-music', () => { save.music = !save.music; setMusicEnabled(save.music); writeSave(save); refreshToggles(); sfx.tap(); });
 on('btn-notify', () => { save.notify = save.notify === false; writeSave(save); refreshToggles(); sfx.tap(); if (save.notify) askNotificationPermission(); scheduleNotifications(save); });
