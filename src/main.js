@@ -26,6 +26,16 @@ import { runOpening } from './opening.js';
 import { towerArt } from './onboard-art.js';
 import promoIcon from '../assets/promo-nfa-128.webp';
 import promoIcon2 from '../assets/promo-choices-128.webp';
+import { createRemote } from './remote.js';
+import { createReview } from './review.js';
+import { makeCard, shareCanvas } from './share.js';
+import { createLeaderboard } from './leaderboard.js';
+import { createCrossRewards } from './crossreward.js';
+import { createInterstitials } from './interstitial.js';
+import { adPrivacy as admobApi } from './ads.js';
+const CLOUD = typeof __CLOUD__ !== 'undefined' && __CLOUD__;
+const remote = createRemote('tower', { enabled: CLOUD, defaults: { coin_mult: 1 } });
+remote.refresh();
 import { scheduleNotifications, askNotificationPermission, planNotifications } from './notify.js';
 import { dayIndex, dailySpecN, dailySeed } from './daily.js';
 import DAILY_TOWERS from './daily.json';
@@ -1182,7 +1192,7 @@ async function win() {
   burst(hero.x, hero.y + 1.4, [0xffbe2e, 0x2f7cf6, 0xe8453c, 0x2eb872, 0xffffff], 60, 6);
   const today = dayKey(new Date());
   const firstDaily = level.daily && save.dtLast !== today;
-  const reward = (level.daily ? (firstDaily ? 100 : 0) : coinReward(level.n, save.up.income)) * (EVENT.id === 'coins2' ? 2 : 1);
+  const reward = Math.round((level.daily ? (firstDaily ? 100 : 0) : coinReward(level.n, save.up.income)) * (EVENT.id === 'coins2' ? 2 : 1) * remote.num('coin_mult', 1, 0.2, 5));
   if (!level.daily && level.n > 0) {
     if (!save.week || save.week.w !== EVENT.week) save.week = { w: EVENT.week, wins: 0, claimed: false };
     save.week.wins++;
@@ -1205,6 +1215,9 @@ async function win() {
   save.coins += reward;
   if (!level.daily) save.level = Math.max(save.level, level.n + 1);
   writeSave(save);
+  if (!level.daily && level.n > 0) leaderboard.submit('level', save.level - 1);
+  if (level.daily && firstDaily) leaderboard.submit('daily', save.dtStreak);
+  lastShare = { title: level.daily ? t('dt.won') : t('sh.win', { n: level.n }), line: t('sh.dare') };
   track('level_win', { level: level.n, moves: history.length, stars });
   if (level.n === 3 && !save.notifAsked) { save.notifAsked = 1; writeSave(save); askNotificationPermission(); }
   await wait(1.1);
@@ -1224,7 +1237,7 @@ async function win() {
   showScreen('screen-won');
   if (!level.daily && level.n > 0) {
     account.onRunEnd();
-    setTimeout(() => { if (state === 'won' && my === gen) account.maybeAsk(); }, 2200);
+    setTimeout(() => { if (state === 'won' && my === gen && !account.maybeAsk()) review.onWin(stars === 3 ? 'big' : 'win'); }, 2200);
   }
   for (let i = 0; i < stars; i++) {
     await wait(0.28);
@@ -1472,6 +1485,7 @@ function showBackdrop() {
   syncBoard();
 }
 function goHome() {
+  setTimeout(() => showNotice(), 0);
   if (trialSkin && trialLevel !== null) { trialSkin = null; trialLevel = null; applySkin(); }
   state = 'home';
   setSong('main');
@@ -1656,9 +1670,10 @@ function renderMap() {
   $('map-stars').textContent = total;
   if (current) requestAnimationFrame(() => current.scrollIntoView({ block: 'center' }));
 }
-on('btn-next', () => {
+on('btn-next', async () => {
   sfx.tap();
   if (level.daily) { goHome(); return; }
+  if (level.n > 0) await inter.afterLevel(level.n);
   save.treasure = save.treasure || {};
   if (level.n > 0 && level.n % 10 === 0 && !save.treasure[level.n]) { openTreasure(level.n); return; }
   startLevel(level.n + 1);
@@ -1777,6 +1792,54 @@ const account = createAccount({
   refreshWallet: () => updateCoins(),
   backToSettings: () => { refreshToggles(); $('account-state').textContent = account.label(); showScreen('screen-settings'); },
 });
+// ---------------------------------------------------------------- leaderboard, review, gifts, share, ads between levels
+const leaderboard = createLeaderboard({
+  game: 'tower', enabled: CLOUD, t, sfx, track,
+  boards: [{ id: 'level', label: () => t('lb.board.level') }, { id: 'daily', label: () => t('dt.btn').replace(/^\S+\s/, '') }],
+});
+const review = createReview({ game: 'tower', save, writeSave: () => writeSave(save), t, track, remote, gameName: 'Not a Fake Ad: Tower', canShow: () => state === 'won' && $('screen-account').hidden });
+const inter = createInterstitials({ admob: admobApi, remote, track });
+const giftCoins = (n, h) => () => { save.coins += n; save.hints += h; updateCoins(); updateHints(); };
+const cross = createCrossRewards({
+  save, writeSave: () => writeSave(save), t, sfx, track,
+  levels: () => account.otherLevels(),
+  icons: { nfa: promoIcon, choices: promoIcon2 },
+  names: { nfa: 'Not a Fake Ad', choices: 'Not a Fake Ad: Choices' },
+  onSignIn: () => account.open('settings'),
+  rewards: [
+    { id: 'nfa10', from: 'nfa', level: 10, gift: () => t('cr.coinsHints', { n: 500, h: 3 }), grant: giftCoins(500, 3) },
+    { id: 'choices10', from: 'choices', level: 10, gift: () => t('cr.coinsHints', { n: 500, h: 3 }), grant: giftCoins(500, 3) },
+    { id: 'nfa30', from: 'nfa', level: 30, gift: () => t('cr.coinsHints', { n: 1500, h: 5 }), grant: giftCoins(1500, 5) },
+    { id: 'choices30', from: 'choices', level: 30, gift: () => t('cr.coinsHints', { n: 1500, h: 5 }), grant: giftCoins(1500, 5) },
+  ],
+});
+setTimeout(async () => { await cross.refresh(); if (cross.count() && state === 'home') setTip(t('cr.new'), 3000); }, 6000);
+let lastShare = null;
+async function shareMoment() {
+  if (!lastShare) return;
+  sfx.tap();
+  renderer.render(scene, camera);
+  const shot = document.createElement('canvas');
+  shot.width = renderer.domElement.width; shot.height = renderer.domElement.height;
+  shot.getContext('2d').drawImage(renderer.domElement, 0, 0);
+  const card = makeCard({ shot, title: lastShare.title, line: lastShare.line, logo: 'Not a Fake Ad: Tower', sub: t('sh.cta'), colors: { top: '#bfe0ff', bottom: '#8a78f0' } });
+  const how = await shareCanvas(card, { title: 'Not a Fake Ad: Tower', text: `${t('sh.text', { game: 'Not a Fake Ad: Tower' })} ${storeLink('tower')}`, file: 'nfa-tower.png' });
+  track('share', { kind: 'win', how });
+}
+function showNotice() {
+  const id = remote.get('notice_id', '');
+  const n = remote.get('notice', null);
+  if (!id || !n || save.noticeSeen === id) return;
+  const text = typeof n === 'string' ? n : n[getLang()] || n.en;
+  if (!text) return;
+  save.noticeSeen = id; writeSave(save);
+  setTimeout(() => setTip(String(text).slice(0, 160), 4000), 800);
+}
+remote.onChange(() => { if (state === 'home') showNotice(); });
+on('btn-share-won', () => shareMoment());
+on('btn-lb', () => { sfx.tap(); leaderboard.open('level'); });
+on('btn-gifts', () => { sfx.tap(); $('screen-settings').hidden = true; cross.open(); });
+
 on('btn-account', () => { sfx.tap(); $('screen-settings').hidden = true; account.open('settings'); });
 for (const id of ['link-privacy', 'link-support']) $(id).addEventListener('click', (e) => { e.preventDefault(); openLink($(id).href); });
 on('btn-lang', () => { setLang(nextLang()); refreshToggles(); sfx.tap(); });
@@ -1998,6 +2061,11 @@ track('session_start');
 // test hooks (used by the headless bot)
 window.__tower = {
   get state() { return state; },
+  review: () => review.show(),
+  share: () => shareMoment(),
+  cross: () => cross.open(),
+  lb: (b) => leaderboard.open(b),
+  get saveObj() { return save; },
   get busy() { return busy; },
   get level() { return level; },
   get power() { return power; },

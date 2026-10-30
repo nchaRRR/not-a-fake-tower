@@ -346,6 +346,7 @@
   <div class="home-top">
     <span class="chip"><span class="coin-icon" aria-hidden="true"></span><span id="home-coins">0</span></span>
     <div class="top-tools">
+      <button class="icon-btn" id="btn-lb" type="button" aria-label="Leaderboard" data-i18n-label="lb.open"><span style="font-size:21px;line-height:1">🥇</span></button>
       <button class="icon-btn" id="btn-ach" type="button" aria-label="Achievements" data-i18n-label="ach.title">
         <svg viewBox="0 0 24 24"><path d="M7 3h10v2h3v3a4 4 0 0 1-4 4h-.3A5 5 0 0 1 13 14.9V17h3v4H8v-4h3v-2.1A5 5 0 0 1 8.3 12H8a4 4 0 0 1-4-4V5h3zm-1 4v1a2 2 0 0 0 1 1.7V7zm12 0v2.7A2 2 0 0 0 18 8V7z"/></svg>
         <span class="badge" id="ach-badge" hidden>!</span>
@@ -561,6 +562,7 @@
   <div class="card">
     <h2 data-i18n="settings">Settings</h2>
     <div class="set-row"><span><span data-i18n="acc.section">Account</span><small id="account-state" class="acc-state"></small></span><button class="btn btn-plain" id="btn-account" type="button" data-i18n="acc.open">Open</button></div>
+    <div class="set-row"><span data-i18n="cr.title">Nimoriq gifts</span><button class="btn btn-plain" id="btn-gifts" type="button">🎁</button></div>
     <div class="set-row"><span data-i18n="set.lang">Language</span><button class="btn btn-plain" id="btn-lang" type="button">English</button></div>
     <div class="set-row"><span data-i18n="sound">Sound</span><button class="btn btn-plain" id="btn-sound" type="button">On</button></div>
     <div class="set-row"><span data-i18n="music">Music</span><button class="btn btn-plain" id="btn-music" type="button">On</button></div>
@@ -588,7 +590,7 @@
     </div>
     <button class="btn btn-ad" id="btn-double" type="button"><span class="tv" aria-hidden="true">📺</span><span data-i18n="ad.double">Double coins</span></button>
     <button class="btn btn-big btn-green" id="btn-next" type="button" data-i18n="next">Next level</button>
-    <button class="btn btn-gold" id="btn-won-shop" type="button" data-i18n="shop">Shop</button>
+    <div class="btn-row"><button class="btn btn-gold" id="btn-won-shop" type="button" data-i18n="shop">Shop</button><button class="btn" id="btn-share-won" type="button"><span>📤 </span><span data-i18n="sh.btn">Share</span></button></div>
   </div>
 </section>
 
