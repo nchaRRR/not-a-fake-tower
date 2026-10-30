@@ -1,5 +1,6 @@
 package com.nimoriq.nfatower;
 
+import android.content.pm.ActivityInfo;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.WindowManager;
@@ -16,6 +17,10 @@ public class MainActivity extends BridgeActivity {
         // come AFTER that: calling it earlier builds the window with the launch (splash) theme, which
         // on Android 12+ carries a framework action bar — the empty strip at the top of the game.
         super.onCreate(savedInstanceState);
+        // Phones stay in portrait; tablets (smallest width 600dp and up) may turn freely. No lock in
+        // the manifest: Android 16 ignores it on large screens anyway, and the game is laid out for both.
+        boolean tablet = getResources().getConfiguration().smallestScreenWidthDp >= 600;
+        setRequestedOrientation(tablet ? ActivityInfo.SCREEN_ORIENTATION_FULL_USER : ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
         EdgeToEdge.enable(this);
         hideTitleBar();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {

@@ -13,12 +13,14 @@
 //   curse     power = floor(power / 2)   (the hero dies if that leaves 0)
 //   key       the hero picks up a key
 //   lock      a locked door: it can only be entered while carrying a key, which it uses up
+//   fuse v    a lit bomb: it must be entered (defused) by move v at the latest. If v floors have been
+//             cleared and it is still standing, it goes off and the hero is lost. Power is unchanged.
 // The level is won the moment the boss is beaten (levels without a boss: when every floor is cleared).
 
-export const KINDS = ['enemy', 'shield', 'boss', 'sword', 'potion', 'trap', 'princess', 'curse', 'key', 'lock'];
+export const KINDS = ['enemy', 'shield', 'boss', 'sword', 'potion', 'trap', 'princess', 'curse', 'key', 'lock', 'fuse'];
 // One letter per kind in levels.json: e12 enemy, b80 boss, s5 sword, x potion (x2), t9 trap, q princess,
-// h curse (half), k key, l lock, d12 shield bearer
-export const CODE = { shield: 'd', enemy: 'e', boss: 'b', sword: 's', potion: 'x', trap: 't', princess: 'q', curse: 'h', key: 'k', lock: 'l' };
+// h curse (half), k key, l lock, d12 shield bearer, f6 bomb (defuse by move 6)
+export const CODE = { shield: 'd', enemy: 'e', boss: 'b', sword: 's', potion: 'x', trap: 't', princess: 'q', curse: 'h', key: 'k', lock: 'l', fuse: 'f' };
 const DECODE = Object.fromEntries(Object.entries(CODE).map(([k, v]) => [v, k]));
 export function decodeLevel(raw, n) {
   return {
@@ -45,6 +47,12 @@ export function mulberry32(seed) {
 // solvable): 'potion3' potions triple, 'sword2' swords count double, 'trapHalf' traps take half.
 let EVENT = null;
 export function setEvent(id) { EVENT = id; }
+// The solver without the weekly event: what the player builds must stay solvable every week.
+export function solvePlain(level) {
+  const e = EVENT;
+  EVENT = null;
+  try { return solve(level); } finally { EVENT = e; }
+}
 export const potionMult = () => (EVENT === 'potion3' ? 3 : 2);
 export const swordValue = (cell) => (EVENT === 'sword2' ? cell.v * 2 : cell.v);
 export const trapValue = (cell) => (EVENT === 'trapHalf' ? Math.ceil(cell.v / 2) : cell.v);
@@ -72,13 +80,26 @@ export function step(p, k, cell) {
   return { p: apply(p, cell), k };
 }
 
+// Bombs: with h floors cleared per tower and `moves` floors cleared in all, does a bomb that is
+// still standing go off? (Deadlines count from the start of the level.)
+export function fuseOut(towers, h, moves) {
+  for (let t = 0; t < towers.length; t++) {
+    const tw = towers[t];
+    for (let k = h[t]; k < tw.length; k++) if (tw[k].kind === 'fuse' && tw[k].v <= moves) return true;
+  }
+  return false;
+}
+const hasFuse = (towers) => towers.some((tw) => tw.some((c) => c.kind === 'fuse'));
+
 // Exhaustive search over every order. Returns how many orders win, how many orders exist,
 // and one winning order (tower indexes) if there is one.
 export function solve(level) {
   const towers = level.towers;
   const memo = new Map();
+  const fuses = hasFuse(towers);
+  const moves0 = level.moves || 0; // floors already cleared before this position (hints mid-level)
   const mkey = (h, p, keys) => h.join(',') + '|' + p + '|' + keys;
-  function count(h, p, keys) {
+  function count(h, p, keys, m) {
     const mk = mkey(h, p, keys);
     if (memo.has(mk)) return memo.get(mk);
     let wins = 0;
@@ -105,7 +126,13 @@ export function solve(level) {
         continue;
       }
       h[t]++;
-      const r = count(h, ns.p, ns.k);
+      if (fuses && fuseOut(towers, h, moves0 + m + 1)) {
+        // a bomb went off: a loss, like dying
+        h[t]--;
+        total += orders(h, t);
+        continue;
+      }
+      const r = count(h, ns.p, ns.k, m + 1);
       h[t]--;
       wins += r.wins;
       total += r.total;
@@ -120,7 +147,7 @@ export function solve(level) {
     const left = towers.map((tw, i) => tw.length - h[i] - (i === t ? 1 : 0));
     return multinomial(left);
   }
-  const r = count(towers.map(() => 0), level.start, level.keys || 0);
+  const r = count(towers.map(() => 0), level.start, level.keys || 0, 0);
   return { wins: r.wins, total: r.total, ratio: r.total ? r.wins / r.total : 0, path: r.path };
 }
 
@@ -153,6 +180,7 @@ export function greedy(level) {
     p = ns.p;
     k = ns.k;
     h[options[0]]++;
+    if (fuseOut(towers, h, h.reduce((a, b) => a + b, 0))) return false;
   }
 }
 
@@ -171,8 +199,13 @@ function lateSpec(n) {
   return { ...base, ...flavour };
 }
 
+// Bomb levels: from level 42, every 6th level has a lit bomb (two from level 120) that must be
+// defused in time. They replace the plain levels that were there before.
+export const fuseLevel = (n) => n >= 42 && (n - 42) % 6 === 0;
+const fuseCount = (n) => (fuseLevel(n) ? (n >= 120 ? 2 : 1) : 0);
+
 export function levelSpec(n) {
-  if (n > 100) return lateSpec(n);
+  if (n > 100) return { ...lateSpec(n), fuses: fuseCount(n) };
   const towers = n <= 1 ? 1 : n <= 3 ? 2 : n <= 12 ? 3 : 4;
   const floors = n <= 1 ? 3 : n <= 3 ? 2 + (n - 1) : n <= 6 ? 3 : n <= 15 ? 4 : 5;
   return {
@@ -189,6 +222,7 @@ export function levelSpec(n) {
     // share of random orders that may win: lower is harder
     ratio: n <= 2 ? [0.3, 1] : n <= 5 ? [0.12, 0.6] : n <= 12 ? [0.04, 0.3] : n <= 25 ? [0.01, 0.15] : [0.002, 0.08],
     mustFoolGreedy: n >= 8 && n % 3 !== 1,
+    fuses: fuseCount(n),
   };
 }
 
@@ -213,10 +247,12 @@ export function carefulTarget(n) {
 // Plays a level many times with random choices; careful players skip moves that kill at once.
 export function simulate(level, careful, runs, rng) {
   let wins = 0;
+  const fuses = hasFuse(level.towers);
   for (let r = 0; r < runs; r++) {
     const h = level.towers.map(() => 0);
     let p = level.start;
     let k = 0;
+    let m = 0;
     for (;;) {
       const opts = [];
       for (let t = 0; t < h.length; t++) {
@@ -224,6 +260,12 @@ export function simulate(level, careful, runs, rng) {
         const ns = step(p, k, level.towers[t][h[t]]);
         if (!ns) continue;
         if (careful && ns.p < 0) continue;
+        if (careful && fuses && level.towers[t][h[t]].kind !== 'boss') {
+          h[t]++;
+          const blown = fuseOut(level.towers, h, m + 1);
+          h[t]--;
+          if (blown) continue;
+        }
         opts.push(t);
       }
       if (!opts.length) { if (h.every((v, t) => v >= level.towers[t].length)) wins++; break; }
@@ -232,9 +274,11 @@ export function simulate(level, careful, runs, rng) {
       const ns = step(p, k, cell);
       if (ns.p < 0) break;
       h[t]++;
+      m++;
       p = ns.p;
       k = ns.k;
       if (cell.kind === 'boss') { wins++; break; }
+      if (fuses && fuseOut(level.towers, h, m)) break;
     }
   }
   return wins / runs;
@@ -242,7 +286,8 @@ export function simulate(level, careful, runs, rng) {
 
 // seed: optional, for levels that are not part of the numbered list (the daily tower).
 export function buildLevel(n, seed = null) {
-  const spec = levelSpec(n);
+  // the daily tower keeps its own mix (no bombs)
+  const spec = seed === null ? levelSpec(n) : { ...levelSpec(n), fuses: 0 };
   const target = carefulTarget(n);
   for (let attempt = 0; attempt < 900; attempt++) {
     // relax step by step if a level is hard to hit
@@ -275,6 +320,13 @@ export function buildLevel(n, seed = null) {
       if (where.has(b) || b <= a) { where.delete(a); continue; }
       where.set(b, 'lock');
     }
+    // bombs: somewhere in the first half of the hidden order; the deadline is set below
+    for (let q = 0; q < spec.fuses; q++) {
+      let a;
+      let tries = 0;
+      do { a = ri(2, Math.max(2, Math.floor(slots * 0.6))); tries++; } while (where.has(a) && tries < 40);
+      if (!where.has(a)) where.set(a, 'fuse');
+    }
     let ok = true;
     for (let i = 0; i < slots; i++) {
       const e = where.get(i);
@@ -286,6 +338,7 @@ export function buildLevel(n, seed = null) {
       else if (e === 'shield') cell = { kind: 'shield', v: Math.max(1, ri(Math.floor(p * 0.22), Math.max(1, Math.floor((p - 1) / 2)))) };
       else if (e === 'key') cell = { kind: 'key' };
       else if (e === 'lock') cell = { kind: 'lock' };
+      else if (e === 'fuse') cell = { kind: 'fuse', v: i + 1 + ri(0, 2) };
       else {
         // enemies: mostly a good bite, sometimes just under the hero's power
         const lo = Math.max(1, Math.floor(p * 0.3));

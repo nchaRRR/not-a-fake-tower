@@ -9,7 +9,11 @@ import { loadSave, writeSave, freshSave as loadSaveFresh } from './save.js';
 import { track } from './analytics.js';
 import { startTelemetry } from './telemetry.js';
 import { t, getLang, setLang, applyStatic, nextLang, LANG_NAMES } from './i18n.js';
-import { apply, solve, step, decodeLevel, buildLevel, setEvent, potionMult, swordValue, trapValue } from './rules.js';
+import { apply, solve, step, decodeLevel, buildLevel, setEvent, potionMult, swordValue, trapValue, fuseOut, solvePlain } from './rules.js';
+import { createEditor } from './editor.js';
+import { pretty as prettyCode } from './codes.js';
+import { CARDS, CARD_SETS, cardById, cardArt, rollCard, setCards, setDone, DUP_COINS, DROP_CHANCE } from './cards.js';
+import { createSeason } from './season.js';
 import { currentEvent, WEEK_GOAL, WEEK_REWARD } from './events.js';
 // anonymous play statistics (phone app only)
 startTelemetry({ game: 'tower', version: typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev', enabled: typeof __CLOUD__ !== 'undefined' && __CLOUD__, lang: () => document.documentElement.lang });
@@ -37,6 +41,7 @@ import { adPrivacy as admobApi } from './ads.js';
 const CLOUD = typeof __CLOUD__ !== 'undefined' && __CLOUD__;
 const remote = createRemote('tower', { enabled: CLOUD, defaults: { coin_mult: 1 } });
 remote.refresh();
+const season = createSeason(remote);
 import { scheduleNotifications, askNotificationPermission, planNotifications } from './notify.js';
 import { dayIndex, dailySpecN, dailySeed } from './daily.js';
 import DAILY_TOWERS from './daily.json';
@@ -146,6 +151,13 @@ const G = {
   plank: new THREE.BoxGeometry(RW - 0.4, 0.05, 0.03),
   padlock: new THREE.BoxGeometry(0.38, 0.32, 0.14),
   shackle: new THREE.TorusGeometry(0.12, 0.04, 8, 16, Math.PI),
+  bomb: new THREE.SphereGeometry(0.36, 18, 14),
+  bombCap: new THREE.CylinderGeometry(0.13, 0.15, 0.12, 12),
+  bombCord: new THREE.CylinderGeometry(0.03, 0.03, 0.3, 6).rotateZ(-0.6),
+  bombSpark: new THREE.OctahedronGeometry(0.1, 0),
+  bulb: new THREE.SphereGeometry(0.075, 10, 8),
+  wreath: new THREE.TorusGeometry(0.26, 0.09, 8, 20),
+  snowCap: new THREE.ConeGeometry(RW * 0.82 * 0.46, 1.7 * 0.46, 4).rotateY(Math.PI / 4),
 };
 const M = {
   wallA: mat(0xf3dcc0), wallB: mat(0xe8c9a6), cleared: mat(0xd8c7b6),
@@ -162,6 +174,11 @@ const M = {
   halo: new THREE.MeshBasicMaterial({ color: 0xc58bff }),
   door: mat(0x8a5a32), plank: mat(0x6b4224),
   shield: mat(0x6a7f9e, { metalness: 0.4, roughness: 0.4 }),
+  bomb: mat(0x2b2140, { roughness: 0.35, metalness: 0.2 }), bombCap: mat(0x8a96a8, { metalness: 0.5, roughness: 0.4 }),
+  cord: mat(0xc49a6c), spark: new THREE.MeshBasicMaterial({ color: 0xffb000 }),
+  // Christmas: garland, blinking lights, snow on the roofs
+  garland: mat(0x1f7a3a, { roughness: 0.9 }), snow: mat(0xffffff, { roughness: 1 }), bow: mat(0xe8453c),
+  lights: [0xff4a4a, 0xffd34d, 0x4ad66b, 0x4aa8ff].map((c) => mat(c, { emissive: c, emissiveIntensity: 0.8, roughness: 0.3 })),
 };
 function makeKey(parent, s = 1) {
   const g = new THREE.Group();
@@ -187,6 +204,57 @@ applySkin();
 const enemySet = new FigureSet(scene, 30, { body: 0xe8453c, head: 0xffc9a8, helmet: 0x8e2620, pack: 0x8e2620, legs: 0x4a2230 });
 const bossSet = new FigureSet(scene, 2, { body: 0x5a2f9e, head: 0x9adf6a, helmet: 0xffbe2e, pack: 0x3a1d6b, legs: 0x2a1745 });
 const princessSet = new FigureSet(scene, 2, { body: 0xff7eb6, head: 0xffd2b0, helmet: 0xffbe2e, pack: 0xff9ac8, legs: 0xff7eb6 });
+
+// ---------------------------------------------------------------- Christmas season
+// Santa hat on the hero (figure space: the face looks along -z, so the tip falls backwards)
+const SANTA_HAT = [
+  { geo: new THREE.TorusGeometry(0.112, 0.032, 8, 20).rotateX(Math.PI / 2).translate(0, 0.7, 0), color: 0xffffff },
+  { geo: new THREE.ConeGeometry(0.108, 0.24, 14).rotateX(0.45).translate(0, 0.8, 0.04), color: 0xd62839 },
+  { geo: new THREE.SphereGeometry(0.036, 10, 8).translate(0, 0.905, 0.095), color: 0xffffff },
+];
+// snow that falls in every world while the season is on (on top of the world's own weather)
+const XSNOW_N = 170;
+const xsnowGeo = new THREE.BufferGeometry();
+const xsnowPos = new Float32Array(XSNOW_N * 3);
+const xsnowVel = new Float32Array(XSNOW_N * 2);
+xsnowGeo.setAttribute('position', new THREE.BufferAttribute(xsnowPos, 3));
+const xsnow = new THREE.Points(xsnowGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 6 * Math.min(2, window.devicePixelRatio || 1), sizeAttenuation: false, transparent: true, opacity: 0.9, depthWrite: false }));
+xsnow.frustumCulled = false;
+xsnow.visible = false;
+xsnow.renderOrder = 4;
+scene.add(xsnow);
+function seedSnow(i, anywhere) {
+  const x0 = camera.position.x + camera.left;
+  const w = camera.right - camera.left;
+  const y0 = camera.position.y - 7 + camera.bottom;
+  const hgt = camera.top - camera.bottom;
+  xsnowPos[i * 3] = x0 + Math.random() * w;
+  xsnowPos[i * 3 + 1] = anywhere ? y0 + Math.random() * hgt : y0 + hgt + 0.5;
+  xsnowPos[i * 3 + 2] = 2 + Math.random() * 3;
+  xsnowVel[i * 2] = (Math.random() - 0.5) * 0.5;
+  xsnowVel[i * 2 + 1] = -(0.9 + Math.random() * 0.9) * Math.max(1, hgt / 14);
+}
+function updateSnow(dt) {
+  if (!xsnow.visible) return;
+  const bottom = camera.position.y - 7 + camera.bottom - 0.5;
+  for (let i = 0; i < XSNOW_N; i++) {
+    xsnowPos[i * 3] += (xsnowVel[i * 2] + Math.sin(time * 1.3 + i) * 0.25) * dt;
+    xsnowPos[i * 3 + 1] += xsnowVel[i * 2 + 1] * dt;
+    if (xsnowPos[i * 3 + 1] < bottom) seedSnow(i, false);
+  }
+  xsnowGeo.attributes.position.needsUpdate = true;
+}
+let xmasOn = false;
+let hatOn = false;
+// Turns the season look on or off: snow, the hero's hat, the menu garland (towers are decorated in buildBoard).
+function applySeason() {
+  xmasOn = season.xmas();
+  document.body.classList.toggle('xmas', xmasOn);
+  $('xmas-garland').hidden = !xmasOn;
+  if (xmasOn && !xsnow.visible) for (let i = 0; i < XSNOW_N; i++) seedSnow(i, true);
+  xsnow.visible = xmasOn;
+  if (hatOn !== xmasOn) { hatOn = xmasOn; heroSet.setExtras(xmasOn ? SANTA_HAT : []); }
+}
 
 // ---------------------------------------------------------------- worlds & weather
 const WEATHER_N = 260;
@@ -377,6 +445,7 @@ function clearBoard() {
   scene.remove(board);
   board.traverse((o) => {
     if (o.material && o.material.map) { o.material.map.dispose(); o.material.dispose(); }
+    if (o.userData.ownGeo) o.geometry.dispose();
   });
   board = new THREE.Group();
   scene.add(board);
@@ -391,6 +460,24 @@ function addMesh(geo, m, x, y, z, parent = board) {
   o.receiveShadow = true;
   parent.add(o);
   return o;
+}
+
+// lights and a garland under the roof, a wreath on the top floor, snow on the roof
+function decorate(x, top) {
+  const y = top + SLAB * 0.5;
+  const z = RD / 2 + 0.14;
+  const curve = new THREE.QuadraticBezierCurve3(new THREE.Vector3(x - RW / 2 - 0.15, y, z), new THREE.Vector3(x, y - 0.55, z + 0.06), new THREE.Vector3(x + RW / 2 + 0.15, y, z));
+  const rope = addMesh(new THREE.TubeGeometry(curve, 18, 0.075, 6), M.garland, 0, 0, 0);
+  rope.castShadow = false;
+  rope.userData.ownGeo = true;
+  for (let i = 0; i < 7; i++) {
+    const p = curve.getPoint((i + 0.5) / 7);
+    addMesh(G.bulb, M.lights[i % 4], p.x, p.y - 0.09, p.z + 0.03).castShadow = false;
+  }
+  const wreath = addMesh(G.wreath, M.garland, x + 0.5, top - FH * 0.42, -RD / 2 + 0.16);
+  addMesh(G.bulb, M.bow, x + 0.5, top - FH * 0.42 - 0.27, -RD / 2 + 0.26).scale.set(1.6, 1, 1);
+  wreath.castShadow = false;
+  addMesh(G.snowCap, M.snow, x, top + SLAB + 0.85 + 0.85 - 0.39 + 0.02, -0.05).scale.setScalar(1.04);
 }
 
 function buildBoard() {
@@ -427,6 +514,7 @@ function buildBoard() {
     addMesh(G.roof, hasBoss ? M.roofBoss : M.roof, x, top + SLAB + 0.85, -0.05);
     addMesh(G.pole, M.pole, x, top + SLAB + 2.1, -0.05);
     addMesh(G.flag, hasBoss ? M.roofBoss : M.flag, x + 0.3, top + SLAB + 2.48, -0.05);
+    if (xmasOn) decorate(x, top);
 
     return tw.map((c, k) => {
       const cell = { ...c, x: x + 0.45, y: k * FH + SLAB, gone: false, anim: null, obj: null, label: null };
@@ -490,6 +578,18 @@ function buildBoard() {
         board.add(g);
         cell.obj = g;
       }
+      if (c.kind === 'fuse') {
+        // a round bomb with a burning cord; its number is the moves left
+        const g = new THREE.Group();
+        addMesh(G.bomb, M.bomb, 0, 0, 0, g);
+        addMesh(G.bombCap, M.bombCap, 0, 0.36, 0, g);
+        addMesh(G.bombCord, M.cord, 0.08, 0.5, 0, g);
+        cell.spark = addMesh(G.bombSpark, M.spark, 0.17, 0.63, 0, g);
+        cell.spark.castShadow = false;
+        g.position.set(cell.x, cell.y + 0.42, 0.1);
+        board.add(g);
+        cell.obj = g;
+      }
       if (c.kind === 'lock') {
         // a door hinged on its left edge, with a padlock in the middle
         cell.x = x;
@@ -547,6 +647,7 @@ function syncBoard() {
       if (c.kind === 'trap' || c.kind === 'lock') c.obj.position.y = c.y;
       if (c.pivot) { c.pivot.rotation.y = 0; c.padlock.visible = true; c.padlock.scale.setScalar(1); }
       if (c.kind === 'sword') c.obj.rotation.z = -0.5;
+      if (c.spark) c.spark.visible = true;
     }
     if (c.label) c.label.visible = !c.gone;
   }));
@@ -563,8 +664,14 @@ function refreshLabels() {
     else if (c.kind === 'potion') c.label.userData.set('x' + potionMult(), '#d4b8ff');
     else if (c.kind === 'trap') c.label.userData.set('-' + fmt(trapValue(c)), '#ffb766');
     else if (c.kind === 'curse') c.label.userData.set('-50%', '#e0b0ff');
+    else if (c.kind === 'fuse') {
+      const left = Math.max(0, c.v - movesDone());
+      c.label.userData.set(String(left), left <= 1 ? '#ff6f5e' : left <= 3 ? '#ffb766' : '#ffe07a');
+    }
   }
 }
+// every move clears exactly one floor, so the floors cleared are the moves made (bomb deadlines)
+const movesDone = () => h.reduce((a, b) => a + b, 0);
 
 // ---------------------------------------------------------------- camera fit
 let view = { minX: -5, maxX: 5, minY: 0, maxY: 10 };
@@ -581,14 +688,17 @@ function fitCamera() {
 }
 
 const camBase = { x: 0, y: 0 };
+const uiScale = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ui')) || 1;
 let shake = 0;
 let timeScale = 1;
 function resize() {
   const w = window.innerWidth;
   const hgt = window.innerHeight;
   renderer.setSize(w, hgt, false);
-  const top = 118;
-  const bottom = 158;
+  // the HUD is drawn larger on tablets (--ui), so the strips it covers grow with it
+  const ui = uiScale();
+  const top = 118 * ui;
+  const bottom = 158 * ui;
   const usable = Math.max(100, hgt - top - bottom);
   let ww = view.maxX - view.minX;
   let wh = view.maxY - view.minY;
@@ -702,8 +812,10 @@ function startLevel(n, data = null) {
   for (const m of confetti) { scene.remove(m); m.material.dispose(); }
   confetti = [];
   level = data ? { ...data, towers: data.towers.map((tw) => tw.map((c) => ({ ...c }))) } : levelData(n);
+  // towers from the builder are played as built: no shop power, no weekly event
+  setEvent(level.custom ? null : EVENT.id);
   h = level.towers.map(() => 0);
-  power = startPower(level.start, save.up.power);
+  power = level.custom ? level.start : startPower(level.start, save.up.power);
   startP = power;
   shownPower = power;
   history = [];
@@ -727,8 +839,8 @@ function startLevel(n, data = null) {
   $('hud-level').textContent = n === 0 ? t('intro.real') : t('level', { n });
   updateHints();
   updateBoosts();
-  $('boosts').hidden = n < 4;
-  if (n > 1 && (n - 1) % 25 === 0) {
+  $('boosts').hidden = n < 4 || !!level.custom;
+  if (n > 1 && (n - 1) % 25 === 0 && !level.custom) {
     const w = worldOf(n);
     showBanner(t('world.' + w.id), 'rgba(43, 33, 64, 0.8)');
     bannerShown = false;
@@ -736,13 +848,19 @@ function startLevel(n, data = null) {
   updateSong();
   const taunts = t('taunts');
   $('taunt').textContent = taunts[(n * 7) % taunts.length].replace('{n}', n);
+  if (level.custom) {
+    $('hud-level').textContent = t(level.mine ? 'ed.hud' : 'code.hud');
+    $('taunt').textContent = t(level.mine ? 'ed.taunt' : 'code.taunt');
+  } else if (level.daily) $('hud-level').textContent = t('dt.hud');
   const kinds = new Set(level.towers.flat().map((c) => c.kind));
   save.seen = save.seen || {};
-  const fresh = ['key', 'curse', 'shield'].find((k) => kinds.has(k) && !save.seen[k]);
+  const fresh = ['key', 'curse', 'shield', 'fuse'].find((k) => kinds.has(k) && !save.seen[k]);
   if (fresh) { save.seen[fresh] = 1; writeSave(save); }
-  setTip(n <= 1 && !save.stars[1] ? t('tip.first') : fresh ? t('tip.' + fresh) : '', fresh ? 5000 : 0);
+  setTip(n <= 1 && !save.stars[1] && !level.custom ? t('tip.first') : fresh ? t('tip.' + fresh) : '', fresh ? 5000 : 0);
+  // a brand-new kind of floor gets its own card the first time
+  if (fresh === 'fuse') { $('rule-art').innerHTML = cardArt(cardById('bomb')); showScreen('screen-rule'); track('rule_intro', { kind: fresh }); }
   updateCoins();
-  track('level_start', { level: n });
+  if (!level.custom) track('level_start', { level: n });
 }
 
 let tipTimer = 0;
@@ -755,7 +873,7 @@ function setTip(text, ms = 0) {
 }
 
 function remainingLevel() {
-  return { start: power, keys, towers: level.towers.map((tw, i) => tw.slice(h[i])) };
+  return { start: power, keys, moves: movesDone(), towers: level.towers.map((tw, i) => tw.slice(h[i])) };
 }
 
 function roomFrame(ti, material) {
@@ -785,8 +903,13 @@ function updateScope() {
     const ns = step(power, keys, cell);
     if (!ns) return;
     let bad = ns.p < 0;
+    if (!bad && cell.kind !== 'boss') {
+      const h2 = h.slice();
+      h2[t]++;
+      bad = fuseOut(level.towers, h2, movesDone() + 1);
+    }
     if (!bad && cell.kind !== 'boss' && cell.kind !== 'princess') {
-      const after = { start: ns.p, keys: ns.k, towers: level.towers.map((x, i) => x.slice(h[i] + (i === t ? 1 : 0))) };
+      const after = { start: ns.p, keys: ns.k, moves: movesDone() + 1, towers: level.towers.map((x, i) => x.slice(h[i] + (i === t ? 1 : 0))) };
       const left = after.towers.some((x) => x.length);
       if (left) bad = solve(after).wins === 0;
     }
@@ -813,20 +936,24 @@ function setHint(ti) {
   hintFrame = g;
 }
 
+// The first hint of every day is free (resets at local midnight).
+const freeHintReady = () => save.freeHint !== dayKey(new Date());
 function hint() {
   if (state !== 'play' || busy) return;
   sfx.tap();
-  if (save.hints <= 0) { setTip(t('tip.nohints'), 2200); openShop('hints', 'play'); return; }
+  const free = freeHintReady();
+  if (!free && save.hints <= 0) { setTip(t('tip.nohints'), 2200); openShop('hints', 'play'); return; }
   const sol = solve(remainingLevel());
   if (!sol.wins) { setTip(t('tip.stuck'), 2600); return; }
   if (hintTower === sol.path[0]) return;
-  save.hints--;
+  if (free) save.freeHint = dayKey(new Date());
+  else save.hints--;
   writeSave(save);
   updateHints();
   setHint(sol.path[0]);
-  setTip(t('tip.hint'), 1800);
+  setTip(free ? t('hint.usedFree') : t('tip.hint'), 1800);
   aids++;
-  track('hint', { level: level.n });
+  track('hint', { level: level.n, free });
 }
 
 // ---------------------------------------------------------------- boosters
@@ -864,7 +991,7 @@ function useBoost(b) {
 }
 async function bombTower(ti) {
   const c = cells[ti][h[ti]];
-  if (['boss', 'princess', 'key', 'lock'].includes(c.kind)) { setTip(t('boost.bombNo'), 2200); sfx.gateBad(); return; }
+  if (['boss', 'princess', 'key', 'lock', 'fuse'].includes(c.kind)) { setTip(t('boost.bombNo'), 2200); sfx.gateBad(); return; }
   bombMode = false;
   save.boost.bomb--;
   aids++;
@@ -890,6 +1017,31 @@ async function bombTower(ti) {
   updateBoosts();
   refreshLabels();
   updateSong();
+  if (fuseOut(level.towers, h, movesDone())) explode();
+}
+
+// A bomb ran out of moves: it swells, goes off, and the hero is lost (the shield booster still saves him).
+async function explode() {
+  const moves = movesDone();
+  let c = null;
+  cells.forEach((tw, i) => tw.forEach((x, k) => { if (!c && k >= h[i] && x.kind === 'fuse' && x.v <= moves) c = x; }));
+  if (!c) return;
+  busy = true;
+  const my = gen;
+  sfx.tick();
+  await tween(0.5, (q) => { c.obj.scale.setScalar(1 + q * 0.7 + Math.sin(q * 40) * 0.08); });
+  if (my !== gen) return;
+  sfx.bigBoom();
+  buzz([40, 30, 80]);
+  shake = 1.3;
+  burst(c.x, c.y + 0.6, [0xff8a3a, 0xffd34d, 0x2b2140, 0xffffff], 44, 5);
+  c.obj.visible = false;
+  if (c.label) c.label.visible = false;
+  popup(t('fuse.boom'), c.x, c.y + 1.6, 'bad');
+  hero.flash = 1;
+  await wait(0.25);
+  if (my !== gen) return;
+  return lose(c, hero.x);
 }
 
 async function move(ti) {
@@ -1063,6 +1215,16 @@ async function move(ti) {
     sfx.gateGood();
     await tween(0.35, (q) => { c.pivot.rotation.y = -ease(q) * 1.9; });
     c.obj.visible = false;
+  } else if (c.kind === 'fuse') {
+    // defused: the spark goes out and the bomb is carried off
+    c.taking = true;
+    if (c.spark) c.spark.visible = false;
+    c.label.visible = false;
+    sfx.coin();
+    popup(t('fuse.ok'), toX, c.y + 1.7, 'good');
+    await tween(0.3, (q) => { c.obj.position.x = c.x + (toX - c.x) * q; c.obj.scale.setScalar(1 - q * 0.7); });
+    c.obj.visible = false;
+    save.stats.bombs = (save.stats.bombs || 0) + 1;
   } else if (c.kind === 'princess') {
     sfx.win();
     burst(c.x, c.y + 1.2, [0xff7eb6, 0xffffff, 0xff4f8f], 20, 3);
@@ -1088,6 +1250,7 @@ async function move(ti) {
     win();
     return;
   }
+  if (fuseOut(level.towers, h, movesDone())) { await explode(); return; }
   busy = false;
   if (h.every((v, i) => v >= cells[i].length)) { setSong('main'); win(); }
   else updateSong();
@@ -1160,7 +1323,7 @@ async function lose(c, atX) {
   if (my !== gen) return;
   $('fail').hidden = false;
   shownPower = 0;
-  track('level_fail', { level: level.n, kind: c.kind });
+  track(level.custom ? 'code_fail' : 'level_fail', { level: level.n, kind: c.kind });
   await wait(1.1);
   if (my !== gen) return;
   if (introAd) {
@@ -1172,7 +1335,7 @@ async function lose(c, atX) {
   }
   $('btn-undo').textContent = freeUndo ? t('undo.free') : t('ad.revive');
   $('btn-undo').className = 'btn ' + (freeUndo ? 'btn-gold' : 'btn-ad');
-  $('lost-line').textContent = t(c.kind === 'trap' ? 'lost.trap' : c.kind === 'curse' ? 'lost.curse' : c.kind === 'shield' ? 'lost.shield' : 'lost.enemy');
+  $('lost-line').textContent = t(c.kind === 'trap' ? 'lost.trap' : c.kind === 'curse' ? 'lost.curse' : c.kind === 'shield' ? 'lost.shield' : c.kind === 'fuse' ? 'lost.fuse' : 'lost.enemy');
   showScreen('screen-lost');
   busy = false;
 }
@@ -1192,15 +1355,18 @@ async function win() {
   }).then(() => { hero.spin = 0; hero.stride = 0; hero.y = baseY; });
   sfx.win();
   burst(hero.x, hero.y + 1.4, [0xffbe2e, 0x2f7cf6, 0xe8453c, 0x2eb872, 0xffffff], 60, 6);
+  const custom = !!level.custom;
   const today = dayKey(new Date());
   const firstDaily = level.daily && save.dtLast !== today;
-  const reward = Math.round((level.daily ? (firstDaily ? 100 : 0) : coinReward(level.n, save.up.income)) * (EVENT.id === 'coins2' ? 2 : 1) * remote.num('coin_mult', 1, 0.2, 5));
-  if (!level.daily && level.n > 0) {
+  const firstClear = !custom && !level.daily && level.n > 0 && level.n >= save.level;
+  const reward = custom ? 0 : Math.round((level.daily ? (firstDaily ? 100 : 0) : coinReward(level.n, save.up.income)) * (EVENT.id === 'coins2' ? 2 : 1) * remote.num('coin_mult', 1, 0.2, 5));
+  if (!custom && !level.daily && level.n > 0) {
     if (!save.week || save.week.w !== EVENT.week) save.week = { w: EVENT.week, wins: 0, claimed: false };
     save.week.wins++;
   }
   const stars = aids === 0 ? 3 : aids <= 2 ? 2 : 1;
-  if (level.daily) {
+  if (custom) { /* towers from the builder give no stars or coins */ }
+  else if (level.daily) {
     if (firstDaily) {
       save.dtStreak = save.dtLast === dayKey(new Date(Date.now() - 864e5)) ? (save.dtStreak || 0) + 1 : 1;
       save.dtLast = today;
@@ -1210,34 +1376,54 @@ async function win() {
     }
   } else save.stars[level.n] = Math.max(save.stars[level.n] || 0, stars);
   const S = save.stats;
-  S.wins = (S.wins || 0) + 1;
-  S.coins = (S.coins || 0) + reward;
-  if (stars === 3) S.perfect = (S.perfect || 0) + 1;
-  if (level.towers.flat().some((c) => c.kind === 'princess')) S.princesses = (S.princesses || 0) + 1;
+  if (custom) S.customWins = (S.customWins || 0) + 1;
+  else {
+    S.wins = (S.wins || 0) + 1;
+    S.coins = (S.coins || 0) + reward;
+    if (stars === 3) S.perfect = (S.perfect || 0) + 1;
+    if (level.towers.flat().some((c) => c.kind === 'princess')) S.princesses = (S.princesses || 0) + 1;
+  }
   save.coins += reward;
-  if (!level.daily) save.level = Math.max(save.level, level.n + 1);
+  if (!custom && !level.daily) save.level = Math.max(save.level, level.n + 1);
+  // a card for the album: sure on a first clear of a boss level (every 5th) and on the day's first daily tower
+  let drop = null;
+  if (!custom && level.n > 0) {
+    const sure = level.daily ? firstDaily : firstClear && level.n % 5 === 0;
+    if (sure || Math.random() < remote.num('card_chance', DROP_CHANCE, 0, 1)) drop = grantCard();
+  }
   writeSave(save);
-  if (!level.daily && level.n > 0) leaderboard.submit('level', save.level - 1);
+  if (!custom && !level.daily && level.n > 0) leaderboard.submit('level', save.level - 1);
   if (level.daily && firstDaily) leaderboard.submit('daily', save.dtStreak);
-  lastShare = { title: level.daily ? t('dt.won') : t('sh.win', { n: level.n }), line: t('sh.dare') };
-  track('level_win', { level: level.n, moves: history.length, stars });
-  if (level.n === 3 && !save.notifAsked) { save.notifAsked = 1; writeSave(save); askNotificationPermission(); }
+  lastShare = custom ? { title: t('code.shareTitle'), line: level.code ? t('code.shareLine', { code: prettyCode(level.code) }) : t('sh.dare') }
+    : { title: level.daily ? t('dt.won') : t('sh.win', { n: level.n }), line: t('sh.dare') };
+  if (custom) track('code_win', { mine: !!level.mine, moves: history.length });
+  else track('level_win', { level: level.n, moves: history.length, stars });
+  if (level.n === 3 && !custom && !save.notifAsked) { save.notifAsked = 1; writeSave(save); askNotificationPermission(); }
   await wait(1.1);
   if (my !== gen) return;
-  $('won-title').textContent = level.daily ? t('dt.won') : level.n === 0 ? t('intro.won') : t('won.title', { n: level.n });
-  $('won-line').textContent = level.daily ? (firstDaily ? t('dt.streak', { n: save.dtStreak }) + ' 💡+1' : t('dt.again'))
-    : t(level.towers.flat().some((c) => c.kind === 'princess') ? 'won.princess' : 'won.line');
-  $('btn-next').textContent = level.daily ? t('home') : t('next');
+  if (custom) {
+    $('won-title').textContent = t(level.mine ? 'ed.won' : 'code.won');
+    $('won-line').textContent = t(level.mine ? 'ed.wonLine' : 'code.wonLine');
+    $('btn-next').textContent = t(level.mine ? 'ed.back' : 'home');
+  } else {
+    $('won-title').textContent = level.daily ? t('dt.won') : level.n === 0 ? t('intro.won') : t('won.title', { n: level.n });
+    $('won-line').textContent = level.daily ? (firstDaily ? t('dt.streak', { n: save.dtStreak }) + ' 💡+1' : t('dt.again'))
+      : t(level.towers.flat().some((c) => c.kind === 'princess') ? 'won.princess' : 'won.line');
+    $('btn-next').textContent = level.daily ? t('home') : t('next');
+  }
   $('won-coins').textContent = '+' + reward;
+  $('won-coins').parentElement.hidden = custom;
   lastReward = reward;
   $('btn-double').hidden = !reward;
   showTrialOffer();
+  showCardDrop(drop, 'won-card', 'wc');
   $('stars-note').textContent = t(stars === 3 ? 'stars.3' : 'stars.less');
+  $('stars-note').hidden = custom;
   const starEls = [...document.querySelectorAll('#stars .star')];
   starEls.forEach((el) => el.classList.remove('on'));
   updateCoins();
   showScreen('screen-won');
-  if (!level.daily && level.n > 0) {
+  if (!custom && !level.daily && level.n > 0) {
     account.onRunEnd();
     setTimeout(() => { if (state === 'won' && my === gen && !account.maybeAsk()) review.onWin(stars === 3 ? 'big' : 'win'); }, 2200);
   }
@@ -1246,6 +1432,124 @@ async function win() {
     if (my !== gen) return;
     starEls[i].classList.add('on');
     sfx.tile(i * 2);
+  }
+}
+
+// ---------------------------------------------------------------- card album
+function grantCard() {
+  save.cards = save.cards || {};
+  const c = rollCard(save.cards);
+  const dup = !!save.cards[c.id];
+  save.cards[c.id] = (save.cards[c.id] || 0) + 1;
+  let coins = 0;
+  if (dup) {
+    coins = DUP_COINS[c.rar];
+    save.coins += coins;
+    save.stats.coins = (save.stats.coins || 0) + coins;
+  } else save.cardsNew = [...new Set([...(save.cardsNew || []), c.id])];
+  const completes = !dup && setDone(save.cards, c.set);
+  track('card_drop', { id: c.id, rar: c.rar, dup });
+  if (completes) track('card_set_done', { id: c.set });
+  return { card: c, dup, coins, completes };
+}
+function showCardDrop(drop, boxId, pre) {
+  const box = $(boxId);
+  box.hidden = !drop;
+  if (!drop) return;
+  const { card, dup, coins, completes } = drop;
+  $(pre + '-art').className = 'mini-card rar-' + card.rar;
+  $(pre + '-art').innerHTML = cardArt(card);
+  $(pre + '-title').textContent = t(dup ? 'card.dup' : 'card.new');
+  $(pre + '-line').textContent = `${t('card.' + card.id)} · ${t('rar.' + card.rar)}` + (dup ? ' · +' + coins + ' 🪙' : '') + (completes ? ' · ' + t('card.setDone') : '');
+  box.classList.toggle('epic', card.rar === 'e');
+  setTimeout(() => sfx.buy(), 500);
+}
+const setClaimable = () => CARD_SETS.filter((st) => !(save.cardSets || {})[st.id] && setDone(save.cards || {}, st.id)).length;
+function refreshAlbumBadge() {
+  const n = (save.cardsNew || []).length + setClaimable();
+  $('album-badge').hidden = !n;
+  $('album-badge').textContent = String(n);
+}
+function rewardText(r) {
+  return [`🪙 ${fmt(r.coins)}`, r.hints ? `💡 ${r.hints}` : '', r.skin ? '👕 ' + t('skin.' + r.skin) : ''].filter(Boolean).join(' · ');
+}
+function renderAlbum() {
+  const list = $('album-list');
+  list.innerHTML = '';
+  const owned = save.cards || {};
+  const fresh = new Set(save.cardsNew || []);
+  save.cardSets = save.cardSets || {};
+  $('album-count').textContent = `${CARDS.filter((c) => owned[c.id]).length}/${CARDS.length}`;
+  for (const st of CARD_SETS) {
+    const cards = setCards(st.id);
+    const have = cards.filter((c) => owned[c.id]).length;
+    const sec = document.createElement('section');
+    const done = have === cards.length;
+    sec.className = 'cset' + (done ? ' done' : '');
+    const claimed = !!save.cardSets[st.id];
+    sec.innerHTML = `<div class="cset-head"><div class="row-text"><h3>${t('cset.' + st.id)} <span class="lvl-tag">${have}/${cards.length}</span></h3><p>${rewardText(st.reward)}</p></div></div>`;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = 'cset-' + st.id;
+    if (claimed) { btn.className = 'btn btn-buy btn-plain'; btn.textContent = '✓'; btn.disabled = true; }
+    else if (done) {
+      btn.className = 'btn btn-buy btn-green';
+      btn.textContent = t('cr.claim');
+      btn.addEventListener('click', () => claimSet(st));
+    } else { btn.className = 'btn btn-buy btn-plain'; btn.textContent = `${have}/${cards.length}`; btn.disabled = true; }
+    sec.firstChild.appendChild(btn);
+    const grid = document.createElement('div');
+    grid.className = 'cgrid';
+    for (const c of cards) {
+      const n = owned[c.id] || 0;
+      const el = document.createElement('div');
+      el.className = `ccard rar-${c.rar}` + (n ? '' : ' missing');
+      el.innerHTML = `<div class="ccard-art">${cardArt(c, !n)}${n ? '' : '<b class="ccard-q">?</b>'}</div><span class="ccard-name">${n ? t('card.' + c.id) : '???'}</span><span class="ccard-rar">${t('rar.' + c.rar)}</span>`
+        + (fresh.has(c.id) ? `<span class="ccard-new">${t('card.newTag')}</span>` : '') + (n > 1 ? `<span class="ccard-n">×${n}</span>` : '');
+      el.setAttribute('aria-label', n ? `${t('card.' + c.id)}, ${t('rar.' + c.rar)}` : t('card.missing'));
+      grid.appendChild(el);
+    }
+    sec.appendChild(grid);
+    list.appendChild(sec);
+  }
+}
+function claimSet(st) {
+  save.cardSets = save.cardSets || {};
+  if (save.cardSets[st.id] || !setDone(save.cards || {}, st.id)) return;
+  save.cardSets[st.id] = 1;
+  const r = st.reward;
+  save.coins += r.coins;
+  save.stats.coins = (save.stats.coins || 0) + r.coins;
+  save.hints += r.hints || 0;
+  if (r.skin && !save.skins.includes(r.skin)) save.skins.push(r.skin);
+  writeSave(save);
+  sfx.win();
+  buzz([30, 30, 60]);
+  burstConfettiDom();
+  track('card_set_claim', { id: st.id });
+  updateCoins();
+  updateHints();
+  renderAlbum();
+  refreshAlbumBadge();
+}
+function openAlbum() {
+  sfx.tap();
+  renderAlbum();
+  showScreen('screen-album');
+  track('album_open', { have: CARDS.filter((c) => (save.cards || {})[c.id]).length });
+}
+// a quick shower of paper bits over the album
+function burstConfettiDom() {
+  const colors = ['#ffbe2e', '#2f7cf6', '#e8453c', '#2eb872', '#8a78f0'];
+  for (let i = 0; i < 28; i++) {
+    const el = document.createElement('i');
+    el.className = 'dom-confetti';
+    el.style.left = 20 + Math.random() * 60 + '%';
+    el.style.background = colors[i % colors.length];
+    el.style.animationDelay = Math.random() * 0.25 + 's';
+    el.style.setProperty('--dx', (Math.random() - 0.5) * 220 + 'px');
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 1600);
   }
 }
 
@@ -1305,7 +1609,8 @@ function undo(fromShield = false) {
 }
 
 // ---------------------------------------------------------------- UI
-const screens = ['screen-home', 'screen-how', 'screen-won', 'screen-lost', 'screen-shop', 'screen-map', 'screen-intro', 'screen-daily', 'screen-treasure', 'screen-ach', 'screen-settings'];
+const screens = ['screen-home', 'screen-how', 'screen-won', 'screen-lost', 'screen-shop', 'screen-map', 'screen-intro', 'screen-daily', 'screen-treasure', 'screen-ach', 'screen-settings',
+  'screen-rule', 'screen-album', 'screen-editor', 'screen-code', 'screen-xmas'];
 function showScreen(id) {
   for (const s of screens) $(s).hidden = s !== id;
 }
@@ -1313,8 +1618,13 @@ function updateCoins() {
   for (const id of ['hud-coins', 'home-coins', 'shop-coins']) $(id).textContent = fmt(save.coins);
 }
 function updateHints() {
+  const free = freeHintReady();
+  $('hint-free').hidden = !free;
+  $('hint-count').hidden = free;
   $('hint-count').textContent = save.hints > 0 ? String(save.hints) : '+';
 }
+// the free hint comes back at local midnight, also while the game stays open
+setInterval(() => { if (state === 'play') updateHints(); }, 30000);
 
 // ---------------------------------------------------------------- shop
 let shopTab = 'power';
@@ -1396,11 +1706,15 @@ function renderShop() {
   } else if (shopTab === 'heroes') {
     for (const k of SKINS) {
       const owned = save.skins.includes(k.id);
+      // the Christmas look only shows up in the season (or once it is yours)
+      if (k.from === 'xmas' && !owned && !xmasOn) continue;
       const name = t('skin.' + k.id);
       const icon = `<span class="swatch" aria-hidden="true" style="--b:${hex(k.body)};--h:${hex(k.head)};--c:${hex(k.helmet)}"></span>`;
-      const li = row(name, `<p>${owned ? t(save.skin === k.id ? 'wearing' : 'owned') : t('skin.look')}</p>`, icon);
+      const li = row(name, `<p>${owned ? t(save.skin === k.id ? 'wearing' : 'owned') : k.from ? t('skin.from.' + k.from) : t('skin.look')}</p>`, icon);
       if (save.skin === k.id) li.appendChild(stateButton('skin-' + k.id, t('on'), true));
       else if (owned) li.appendChild(stateButton('skin-' + k.id, t('wear'), false, () => { save.skin = k.id; applySkin(); }));
+      else if (k.from === 'album') li.appendChild(stateButton('skin-' + k.id, '🃏', true));
+      else if (k.from === 'xmas') li.appendChild(stateButton('skin-' + k.id, t('xmas.claim'), false, () => { claimXmasSkin(); }));
       else {
         const box = document.createElement('div');
         box.className = 'btn-stack';
@@ -1494,6 +1808,7 @@ for (const b of document.querySelectorAll('[data-tab]')) b.addEventListener('cli
 // home backdrop: the next level waits behind the menu
 function showBackdrop() {
   gen++;
+  setEvent(EVENT.id);
   timeScale = 1;
   tweens.length = 0;
   level = levelData(save.level);
@@ -1515,6 +1830,7 @@ function showBackdrop() {
 }
 function goHome() {
   setTimeout(() => showNotice(), 0);
+  applySeason();
   if (trialSkin && trialLevel !== null) { trialSkin = null; trialLevel = null; applySkin(); }
   state = 'home';
   setSong('main');
@@ -1524,8 +1840,10 @@ function goHome() {
   $('btn-play').textContent = t('play', { n: save.level });
   updateCoins();
   refreshAchBadge();
+  refreshAlbumBadge();
   refreshDailyButton();
   refreshEventStrip();
+  refreshXmas();
   showScreen('screen-home');
 }
 const on = (id, fn) => $(id).addEventListener('click', (e) => { e.stopPropagation(); unlockAudio(); fn(); });
@@ -1543,6 +1861,15 @@ on('btn-won-shop', () => { sfx.tap(); openShop(null, 'won'); });
 on('btn-shop-back', closeShop);
 on('btn-intro-go', () => { sfx.tap(); save.seenIntro = 1; save.seenHow = true; writeSave(save); startLevel(0); });
 on('btn-daily', claimDaily);
+on('btn-rule-ok', () => { sfx.tap(); showScreen(null); });
+on('btn-album', openAlbum);
+on('btn-album-back', () => {
+  sfx.tap();
+  // the cards have been seen now
+  save.cardsNew = [];
+  writeSave(save);
+  goHome();
+});
 
 // ---------------------------------------------------------------- the "ad" intro
 async function startIntro() {
@@ -1701,6 +2028,7 @@ function renderMap() {
 }
 on('btn-next', async () => {
   sfx.tap();
+  if (level.custom) { if (level.mine) backToEditor(); else goHome(); return; }
   if (level.daily) { goHome(); return; }
   if (level.n > 0) await inter.afterLevel(level.n);
   save.treasure = save.treasure || {};
@@ -1736,6 +2064,10 @@ function openTreasure(n) {
     box.appendChild(b);
   });
   drawKeys();
+  // the treasure tower always holds a card
+  showCardDrop(grantCard(), 't-card', 'tc');
+  writeSave(save);
+  updateCoins();
   showScreen('screen-treasure');
   track('treasure_open', { level: n });
 }
@@ -1796,7 +2128,85 @@ on('btn-double', async () => {
 on('btn-restart', () => { if (busy) return; sfx.tap(); if (history.length) aids++; startLevel(level.n, preset); });
 on('btn-hint', hint);
 for (const b of BOOSTS) on('boost-' + b, () => useBoost(b));
-on('btn-home', () => { if (busy || introAd) return; sfx.tap(); goHome(); });
+on('btn-home', () => { if (busy || introAd) return; sfx.tap(); if (level && level.custom && level.mine) backToEditor(); else goHome(); });
+// ---------------------------------------------------------------- tower builder and share codes
+// Shares a text through the phone's share sheet; without one, copies `copy` (or the text).
+// Returns 'share', 'copy' or 'none'.
+async function shareText(text, copy) {
+  if (text) {
+    try {
+      const native = window.Capacitor?.Plugins?.Share;
+      if (native && native.share) { await native.share({ text }); return 'share'; }
+      if (navigator.share) { await navigator.share({ text }); return 'share'; }
+    } catch (e) {
+      if (e && (e.name === 'AbortError' || /cancel/i.test(String(e.message || e)))) return 'none';
+    }
+  }
+  try { await navigator.clipboard.writeText(copy || text); return 'copy'; } catch (e) { /* no clipboard */ }
+  return 'none';
+}
+// A tower from the builder or a friend's code, played as it is (world from the code).
+function playCustom(p, o) {
+  const L = { n: (p.world || 0) * 25 + 1, start: p.start, towers: p.towers.map((tw) => tw.map((c) => ({ ...c }))), custom: true, mine: !!o.mine, code: o.code || '' };
+  startLevel(L.n, L);
+}
+const editor = createEditor({ save, writeSave, t, sfx, track, solvePlain, showScreen, play: playCustom, goHome, shareText });
+function backToEditor() { goHome(); editor.open(); }
+on('btn-editor', () => { sfx.tap(); editor.open(); });
+on('btn-code', () => { sfx.tap(); editor.openCode(); });
+
+// ---------------------------------------------------------------- Christmas
+const XMAS_GIFT = 150;
+const xmasGiftReady = () => save.xmasGift !== dayKey(new Date());
+const xmasSkinReady = () => !save.skins.includes('santa');
+function refreshXmas() {
+  const strip = $('xmas-strip');
+  const ready = xmasOn && (xmasGiftReady() || xmasSkinReady());
+  strip.hidden = !ready;
+  if (!ready) return;
+  $('xmas-sub').textContent = xmasGiftReady() ? t('xmas.sub', { n: XMAS_GIFT }) : t('xmas.subSkin');
+  strip.classList.add('ready');
+}
+function renderXmas() {
+  const giftBtn = $('btn-xmas-gift');
+  const g = xmasGiftReady();
+  giftBtn.disabled = !g;
+  giftBtn.innerHTML = g ? `<span class="coin-icon" aria-hidden="true"></span>+${XMAS_GIFT}` : '✓';
+  $('xmas-gift-line').textContent = g ? t('xmas.giftLine') : t('xmas.tomorrow');
+  const k = SKINS.find((x) => x.id === 'santa');
+  $('xmas-swatch').style.cssText = `--b:${hex(k.body)};--h:${hex(k.head)};--c:${hex(k.helmet)}`;
+  const owned = !xmasSkinReady();
+  const b = $('btn-xmas-skin');
+  b.disabled = owned && save.skin === 'santa';
+  b.textContent = !owned ? t('xmas.claim') : save.skin === 'santa' ? t('on') : t('wear');
+  b.className = 'btn btn-buy ' + (owned ? 'btn-plain' : 'btn-gold');
+  $('xmas-skin-line').textContent = owned ? t(save.skin === 'santa' ? 'wearing' : 'owned') : t('skin.from.xmas');
+}
+function claimXmasSkin() {
+  if (!save.skins.includes('santa')) { save.skins.push('santa'); track('xmas_skin'); sfx.buy(); }
+  save.skin = 'santa';
+  trialSkin = null;
+  applySkin();
+  writeSave(save);
+}
+on('xmas-strip', () => { sfx.tap(); renderXmas(); showScreen('screen-xmas'); track('xmas_open'); });
+on('btn-xmas-gift', () => {
+  if (!xmasOn || !xmasGiftReady()) return;
+  save.xmasGift = dayKey(new Date());
+  save.coins += XMAS_GIFT;
+  save.stats.coins = (save.stats.coins || 0) + XMAS_GIFT;
+  writeSave(save);
+  sfx.win();
+  buzz([30, 30, 60]);
+  burstConfettiDom();
+  track('xmas_gift', { coins: XMAS_GIFT });
+  updateCoins();
+  renderXmas();
+});
+on('btn-xmas-skin', () => { if (!xmasOn && xmasSkinReady()) return; sfx.tap(); claimXmasSkin(); renderXmas(); });
+on('btn-xmas-back', () => { sfx.tap(); goHome(); });
+remote.onChange(() => { if (state === 'home' && season.xmas() !== xmasOn) goHome(); });
+
 // ---------------------------------------------------------------- settings
 const onOff = (v) => t(v ? 'set.on' : 'set.off');
 function refreshToggles() {
@@ -1813,7 +2223,8 @@ on('btn-settings', () => { sfx.tap(); refreshToggles(); $('account-state').textC
 on('btn-settings-back', () => { sfx.tap(); goHome(); });
 
 // ---------------------------------------------------------------- account (Supabase, shared with Not a Fake Ad)
-const anyModalOpen = () => ['screen-shop', 'screen-map', 'screen-intro', 'screen-daily', 'screen-treasure', 'screen-ach', 'screen-settings', 'screen-how', 'screen-ad']
+const anyModalOpen = () => ['screen-shop', 'screen-map', 'screen-intro', 'screen-daily', 'screen-treasure', 'screen-ach', 'screen-settings', 'screen-how', 'screen-ad',
+  'screen-rule', 'screen-album', 'screen-editor', 'screen-code', 'screen-xmas']
   .some((id) => !$(id).hidden) || !$('screen-account').hidden;
 const account = createAccount({
   save, writeSave, sfx, track, fmt, anyModalOpen,
@@ -1981,6 +2392,7 @@ function frame() {
     if (q >= 1) { tweens.splice(i, 1); tw.done(); }
   }
   updateWeather(dt);
+  updateSnow(dt);
   for (const c of clouds) { c.position.x += c.userData.speed * dt; if (c.position.x > 30) c.position.x = -30; }
 
   // characters
@@ -2080,7 +2492,9 @@ runOpening({
   onTap: () => unlockAudio(),
 }).then(({ onboarded }) => {
   track('opening_done', { onboarded });
+  const link = /[#&?]code=([0-9A-Za-z-]{4,200})/.exec(location.hash + location.search);
   if (onboarded && state === 'home') startIntro();
+  else if (link && state === 'home') editor.openCode(link[1]);
   else maybeDaily();
 });
 resize();
@@ -2104,5 +2518,12 @@ window.__tower = {
   move,
   undo,
   solveNow: () => solve(remainingLevel()),
+  season: (v) => { season.force(v); if (state === 'home') goHome(); else applySeason(); return xmasOn; },
+  get xmas() { return xmasOn; },
+  editor: () => editor.open(),
+  code: (c) => editor.openCode(c || ''),
+  album: () => openAlbum(),
+  card: () => grantCard(),
+  screen: (id) => showScreen(id),
   notes: () => planNotifications(save).map((n) => ({ ...n, at: n.at.toString() })),
 };

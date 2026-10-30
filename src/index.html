@@ -307,6 +307,161 @@
   .promo-row .promo-text small { font-size: 11px; line-height: 1.15; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .promo-row .promo-go { display: none; }
   @media (max-height: 700px) { #screen-home .tagline { display: none; } }
+
+  /* ---------- free hint, home mini buttons ---------- */
+  .badge-free { right: -12px; min-width: 0; padding: 0 5px; background: var(--gold); color: var(--ink); font-size: 11px; letter-spacing: 0.04em; transform: rotate(8deg); }
+  .r-fuse { background: #5d5172; font-size: 17px !important; }
+  .btn-row3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  /* the extra row of small buttons takes its room from the gap above, so the logo stays put */
+  .home-bottom { margin-top: max(0px, calc(6vh - 46px)); }
+  @media (max-height: 700px) {
+    #screen-home > .ad-tag { display: none; }
+    /* short phones: while a Christmas gift waits, its strip takes the weekly strip's place */
+    #xmas-strip:not([hidden]) + #event-strip { display: none; }
+  }
+  .btn-mini { position: relative; font-size: 17px; padding: 9px 4px 7px; display: flex; align-items: center; justify-content: center; gap: 5px; min-width: 0; white-space: nowrap; }
+  .btn-mini > span:not(.badge) { overflow: hidden; text-overflow: ellipsis; }
+  .mini-ico { font-size: 18px; line-height: 1; flex: none; }
+
+  /* ---------- cards (album, drops) ---------- */
+  .mini-card { flex: none; width: 46px; aspect-ratio: 5 / 6; border: 3px solid var(--ink); border-radius: 9px; overflow: hidden; background: #fff; box-shadow: 0 3px 0 var(--ink); }
+  .mini-card svg, .ccard-art svg { display: block; width: 100%; height: 100%; }
+  .mini-card.rar-r { box-shadow: 0 0 0 3px #7fb4ff, 0 3px 0 var(--ink); }
+  .mini-card.rar-e { box-shadow: 0 0 0 3px var(--gold), 0 3px 0 var(--ink); }
+  .won-card { text-align: left; background: #fff2b8; animation: pop-open 0.45s cubic-bezier(.2,1.7,.4,1) both; animation-delay: 0.35s; }
+  .won-card.epic { background: linear-gradient(120deg, #fff2b8, #ffe07a 50%, #fff2b8); }
+  .won-card .mini-card { transform: rotate(-6deg); }
+  .album-card { gap: 10px; }
+  .album-lede { font-size: 13px; }
+  .album-list { display: flex; flex-direction: column; gap: 12px; max-height: min(58vh, 520px); overflow-y: auto; padding: 2px 2px 4px 0; text-align: left; }
+  .cset { border: 3px solid var(--ink); border-radius: 18px; background: #fff; padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+  .cset-head { display: flex; align-items: center; gap: 10px; }
+  .cset-head h3 { margin: 0; font-family: var(--font-display); font-size: 20px; line-height: 1.1; }
+  .cset-head p { margin: 0; font-size: 13px; font-weight: 800; color: var(--ink-soft); }
+  .cset-head .btn-buy { min-width: 76px; font-size: 17px; }
+  .cset.done { background: #e9fbef; }
+  .cgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .ccard { position: relative; display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 0; }
+  .ccard-art { position: relative; width: 100%; aspect-ratio: 5 / 6; border: 3px solid var(--ink); border-radius: 12px; overflow: hidden; background: #fff; box-shadow: 0 3px 0 var(--ink); }
+  .ccard.rar-r .ccard-art { box-shadow: 0 0 0 3px #7fb4ff, 0 3px 0 var(--ink); }
+  .ccard.rar-e .ccard-art { box-shadow: 0 0 0 3px var(--gold), 0 3px 0 var(--ink); }
+  .ccard.rar-e:not(.missing) .ccard-art::after { content: ""; position: absolute; inset: 0; background: linear-gradient(115deg, transparent 35%, rgba(255,255,255,0.7) 50%, transparent 65%) -150% 0 / 250% 100% no-repeat; animation: shine 2.6s ease-in-out infinite; }
+  @keyframes shine { 60%, 100% { background-position: 150% 0; } }
+  .ccard-q { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--font-display); font-size: 34px; color: #fff; -webkit-text-stroke: 4px var(--ink); paint-order: stroke fill; }
+  .ccard-name { margin-top: 4px; font-family: var(--font-display); font-weight: 800; font-size: 14px; line-height: 1.1; text-align: center; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ccard-rar { font-size: 10px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft); }
+  .ccard.rar-r .ccard-rar { color: var(--blue-deep); } .ccard.rar-e .ccard-rar { color: var(--gold-deep); }
+  .ccard.missing .ccard-name { color: var(--ink-soft); }
+  .ccard-new { position: absolute; top: -7px; left: -5px; background: var(--red); color: #fff; border: 2px solid var(--ink); border-radius: 8px; padding: 0 5px;
+               font-family: var(--font-display); font-weight: 800; font-size: 11px; line-height: 17px; transform: rotate(-8deg); }
+  .ccard-n { position: absolute; top: -7px; right: -5px; background: var(--blue); color: #fff; border: 2px solid var(--ink); border-radius: 8px; padding: 0 5px;
+             font-family: var(--font-display); font-weight: 800; font-size: 11px; line-height: 17px; }
+  .dom-confetti { position: fixed; top: 30%; width: 10px; height: 14px; border: 2px solid var(--ink); border-radius: 2px; z-index: 50; pointer-events: none; animation: domconf 1.5s ease-in forwards; }
+  @keyframes domconf { 0% { transform: translate(0, 0) rotate(0); opacity: 1; } 100% { transform: translate(var(--dx), 70vh) rotate(720deg); opacity: 0; } }
+  .rule-card .rule-art { width: 112px; align-self: center; transform: rotate(-4deg); border-radius: 16px; }
+
+  /* ---------- tower builder ---------- */
+  .ed-card { gap: 10px; }
+  .ed-world { font-size: 15px; padding: 8px 10px 6px; max-width: 58%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ed-start, .ed-val { display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .ed-lbl { font-family: var(--font-display); font-weight: 800; font-size: 17px; margin-right: 4px; }
+  .ed-step { width: 44px; height: 44px; padding: 0; font-size: 24px; border-radius: 12px; flex: none; }
+  .ed-num { width: 92px; padding: 8px 6px; text-align: center; font: 800 20px var(--font-display); -moz-appearance: textfield; }
+  .ed-num::-webkit-inner-spin-button, .ed-num::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  .ed-board { display: flex; justify-content: center; align-items: flex-end; gap: 8px; min-height: 236px; padding: 8px 6px 10px; border-radius: 16px;
+              background: linear-gradient(#bfe0ff 0 calc(100% - 10px), #8fd16a calc(100% - 10px)); border: 3px solid var(--ink); }
+  .ed-col { display: flex; flex-direction: column-reverse; gap: 4px; width: 64px; }
+  .ed-tile { min-height: 40px; border: 3px solid var(--ink); border-radius: 10px; padding: 2px; cursor: pointer; font-family: var(--font-display); font-weight: 800; font-size: 16px;
+             line-height: 1; color: #fff; -webkit-text-stroke: 3px var(--ink); paint-order: stroke fill; background: #fff; white-space: nowrap; overflow: hidden; }
+  .ed-tile:active { transform: translateY(2px); }
+  .ed-tile.sel { outline: 3px solid var(--lilac); outline-offset: 2px; }
+  .ed-tile:focus-visible { outline: 3px solid var(--lilac); outline-offset: 2px; }
+  .ed-add { background: rgba(255,255,255,0.55); border-style: dashed; color: var(--ink); -webkit-text-stroke: 0; font-size: 22px; }
+  .ed-newtower { font-size: 13px; white-space: normal; line-height: 1.05; min-height: 48px; }
+  .k-enemy { background: #ff8f84; } .k-sword { background: #6fe0a0; } .k-potion { background: #b99cff; } .k-trap { background: #ffb766; } .k-boss { background: var(--red); }
+  .k-curse { background: #9b6cff; } .k-shield { background: #9fb0c8; } .k-key { background: var(--gold); } .k-lock { background: #c49a6c; } .k-princess { background: #ff9ac8; }
+  .k-fuse { background: #5d5172; } .k-erase { background: #fff; }
+  .ed-sel { display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 58px; }
+  .ed-sel b { font-family: var(--font-display); font-size: 19px; line-height: 1.1; }
+  .ed-sel small { font-weight: 700; font-size: 13px; color: var(--ink-soft); text-wrap: balance; }
+  .ed-palette { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+  .ed-palette .ed-tile { min-height: 42px; font-size: 15px; padding: 2px 0; }
+  .ed-palette .ed-tile.sel { outline-offset: 1px; box-shadow: 0 0 0 2px #fff inset; }
+  .ed-status { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 18px; border-radius: 12px; padding: 6px 10px 3px; background: var(--line); color: var(--ink) !important; }
+  .ed-status.ok { background: #c9f2da; color: var(--green-deep) !important; }
+  .ed-status.bad { background: #ffd9cf; color: var(--red-deep) !important; }
+  .ed-codeline { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .ed-code { font: 800 22px var(--font-display); letter-spacing: 0.08em; color: var(--ink); background: #fff; border: 3px dashed var(--ink); border-radius: 12px; padding: 8px 12px 5px; cursor: pointer;
+             max-width: 100%; word-break: break-all; -webkit-user-select: all; user-select: all; }
+  .ed-codeline small { font-weight: 800; font-size: 13px; color: var(--green-deep); min-height: 16px; }
+  .tower-code { letter-spacing: 0.12em; font-size: 24px; text-transform: uppercase; }
+
+  /* ---------- Christmas (only while the season is on) ---------- */
+  .xmas-garland { position: fixed; z-index: -1; left: 0; top: calc(env(safe-area-inset-top, 0px) + 66px); width: 100%; height: 48px; pointer-events: none; }
+  .xmas-garland svg { display: block; width: 100%; height: 100%; overflow: visible; }
+  .xl { animation: blink 1.6s steps(1) infinite; }
+  .xl1 { fill: #ff4a4a; } .xl2 { fill: #ffd34d; animation-delay: 0.4s; } .xl3 { fill: #4ad66b; animation-delay: 0.8s; } .xl4 { fill: #4aa8ff; animation-delay: 1.2s; }
+  @keyframes blink { 50% { opacity: 0.35; } }
+  .xmas-strip { background: #ffd9cf; }
+  .xmas-strip.ready { background: #ffb4a6; animation: nudge 1.4s ease-in-out infinite; }
+  body.xmas #btn-play { position: relative; }
+  body.xmas #btn-play::before { content: ""; position: absolute; left: 14px; top: -11px; width: 64px; height: 18px; background: #fff; border: 3px solid var(--ink); border-bottom: 0; border-radius: 50% 50% 0 0 / 100% 100% 0 0; }
+  body.xmas #btn-play::after { content: "❄"; position: absolute; right: 20px; top: -13px; font-size: 16px; line-height: 1; color: #fff; -webkit-text-stroke: 1.5px var(--ink); }
+  .xmas-card .row { text-align: left; }
+  .xmas-card .row p { font-size: 13px; }
+
+  /* a card taller than the screen starts at the top and scrolls, instead of losing its top edge
+     (when it fits, the auto margins centre it exactly as before) */
+  .screen-dim { justify-content: flex-start; }
+  .screen-dim > .card { margin-block: auto; flex: none; }
+  #screen-home { justify-content: flex-start; }
+  #screen-home > .ad-tag { margin-top: auto; }
+  #screen-home > .home-bottom { margin-bottom: auto; }
+  @media (max-height: 700px) {
+    #screen-home > .logo { margin-top: auto; font-size: clamp(40px, 12vw, 64px); }
+    #screen-home { padding-top: calc(env(safe-area-inset-top, 0px) + 64px); gap: 14px; }
+  }
+
+  /* ---------- tablets and iPads: the phone layout, centred and a bit larger ----------
+     Phones (narrower than 700px, or shorter than 700px in landscape) never match these. */
+  @media (min-width: 700px) and (min-height: 700px) {
+    :root { --ui: 1.15; }
+    .card, .home-top, .home-bottom, #screen-home .ad-tag, .logo, .tagline, #hud, #tip, .lb-card, .rv-card, .cr-card, .op-board, .op-splash { zoom: var(--ui); }
+    .home-bottom { margin-top: 2vh; }
+    .album-list, #shop-list, #ach-list, #map-grid { max-height: min(calc(58vh / var(--ui)), 520px); }
+    .cgrid { grid-template-columns: repeat(6, 1fr); }
+    .album-card, .shop-card { width: min(100%, 520px); }
+    .xmas-garland { height: 64px; top: calc(env(safe-area-inset-top, 0px) + 80px); }
+  }
+  @media (min-width: 700px) and (min-height: 960px) and (orientation: portrait) { :root { --ui: 1.3; } }
+  @media (min-width: 1000px) and (min-height: 1300px) { :root { --ui: 1.45; } }
+  @media (min-width: 1200px) and (min-height: 960px) and (orientation: landscape) { :root { --ui: 1.3; } }
+  /* landscape tablets: the builder sits side by side (board left, tools right) */
+  @media (min-width: 700px) and (min-height: 700px) and (orientation: landscape) {
+    #xmas-strip:not([hidden]) + #event-strip { display: none; }
+    .ed-card { width: min(100%, 720px); display: grid; grid-template-columns: 1fr 1fr; column-gap: 16px; row-gap: 10px; align-items: start; }
+    .ed-card > .shop-head { grid-column: 1 / -1; grid-row: 1; }
+    .ed-card > .ed-start { grid-column: 1; grid-row: 2; }
+    .ed-card > .ed-board { grid-column: 1; grid-row: 3 / span 5; align-self: stretch; }
+    .ed-card > .ed-sel { grid-column: 2; grid-row: 2 / span 2; }
+    .ed-card > .ed-palette { grid-column: 2; grid-row: 4; }
+    .ed-card > .ed-status { grid-column: 2; grid-row: 5; }
+    .ed-card > .ed-codeline { grid-column: 2; grid-row: 6; }
+    .ed-card > .ed-row1 { grid-column: 2; grid-row: 7; }
+    .ed-card > .ed-row2 { grid-column: 1; grid-row: 8; }
+    .ed-card > .ed-back { grid-column: 2; grid-row: 8; }
+  }
+  /* portrait tablets: a slightly lower board keeps the builder on one screen */
+  @media (min-width: 700px) and (min-height: 700px) and (orientation: portrait) {
+    .ed-board { min-height: 176px; }
+    .ed-card { gap: 8px; }
+  }
+  /* landscape tablets are short: the logo can be smaller and the tagline goes */
+  @media (min-width: 700px) and (min-height: 700px) and (max-height: 860px) and (orientation: landscape) {
+    #screen-home .tagline { display: none; }
+    .logo { font-size: 60px; }
+    #screen-home { gap: 12px; }
+  }
 </style>
 
 <canvas id="game" aria-label="Not a Fake Ad: Tower"></canvas>
@@ -322,6 +477,7 @@
       <button class="icon-btn" id="btn-hint" type="button" aria-label="Hint" data-i18n-label="hint">
         <svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-4 12.7V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.3A7 7 0 0 0 12 2zm-3 18h6v1a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1z"/></svg>
         <span class="badge" id="hint-count">3</span>
+        <span class="badge badge-free" id="hint-free" data-i18n="hint.free" hidden>FREE</span>
       </button>
       <button class="icon-btn" id="btn-restart" type="button" aria-label="Restart" data-i18n-label="restart">
         <svg viewBox="0 0 24 24"><path d="M12 5V2L7 6l5 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/></svg>
@@ -343,6 +499,12 @@
 <div id="finger" aria-hidden="true" hidden>👆</div>
 
 <section id="screen-home" class="screen">
+  <div class="xmas-garland" id="xmas-garland" aria-hidden="true" hidden><svg viewBox="0 0 400 60" preserveAspectRatio="none">
+    <path d="M-10 6 Q50 46 100 12 Q150 46 200 12 Q250 46 300 12 Q350 46 410 6" fill="none" stroke="#1f7a3a" stroke-width="11" stroke-linecap="round"/>
+    <path d="M-10 6 Q50 46 100 12 Q150 46 200 12 Q250 46 300 12 Q350 46 410 6" fill="none" stroke="#2b2140" stroke-width="2" stroke-dasharray="2 9" stroke-linecap="round"/>
+    <g stroke="#2b2140" stroke-width="2.5"><circle class="xl xl1" cx="22" cy="24" r="6"/><circle class="xl xl2" cx="62" cy="31" r="6"/><circle class="xl xl3" cx="122" cy="28" r="6"/><circle class="xl xl4" cx="168" cy="31" r="6"/><circle class="xl xl1" cx="232" cy="28" r="6"/><circle class="xl xl2" cx="268" cy="31" r="6"/><circle class="xl xl3" cx="330" cy="30" r="6"/><circle class="xl xl4" cx="378" cy="24" r="6"/></g>
+    <g fill="#e8453c" stroke="#2b2140" stroke-width="2.5"><path d="M92 10l8 6 8-6v12l-8-6-8 6z"/><path d="M192 10l8 6 8-6v12l-8-6-8 6z"/><path d="M292 10l8 6 8-6v12l-8-6-8 6z"/></g>
+  </svg></div>
   <div class="home-top">
     <span class="chip"><span class="coin-icon" aria-hidden="true"></span><span id="home-coins">0</span></span>
     <div class="top-tools">
@@ -361,6 +523,11 @@
   <h1 class="logo">Not a<br><span class="strike">Fake</span> Ad<span class="tower">TOWER</span></h1>
   <p class="tagline" data-i18n="tagline">The tower game from those ads. Actually playable.</p>
   <div class="home-bottom">
+    <button class="event-strip xmas-strip" id="xmas-strip" type="button" hidden>
+      <span class="ev-icon" aria-hidden="true">🎄</span>
+      <span class="ev-text"><b data-i18n="xmas.title">Merry Christmas!</b><small id="xmas-sub"></small></span>
+      <span class="ev-goal" data-i18n="xmas.open">Open</span>
+    </button>
     <button class="event-strip" id="event-strip" type="button">
       <span class="ev-icon" aria-hidden="true">🎉</span>
       <span class="ev-text"><b id="ev-title">Potion week</b><small id="ev-desc"></small></span>
@@ -371,6 +538,11 @@
     <div class="btn-row">
       <button class="btn btn-gold" id="btn-shop" type="button" data-i18n="shop">Shop</button>
       <button class="btn btn-plain" id="btn-map" type="button" data-i18n="levels">Levels</button>
+    </div>
+    <div class="btn-row3">
+      <button class="btn btn-plain btn-mini" id="btn-album" type="button"><span class="mini-ico" aria-hidden="true">🃏</span><span data-i18n="album">Album</span><span class="badge" id="album-badge" hidden>!</span></button>
+      <button class="btn btn-plain btn-mini" id="btn-editor" type="button"><span class="mini-ico" aria-hidden="true">🛠️</span><span data-i18n="ed.btn">Build</span></button>
+      <button class="btn btn-plain btn-mini" id="btn-code" type="button"><span class="mini-ico" aria-hidden="true">🔢</span><span data-i18n="code.btn">Codes</span></button>
     </div>
     <div class="promo-row">
     <button class="promo" id="btn-promo" type="button">
@@ -400,6 +572,7 @@
       <b class="r-shield">2×9</b><span data-i18n="how.shield">Shield bearer: you must be more than twice as strong.</span>
       <b class="r-curse">-50%</b><span data-i18n="how.curse">Curse: halves your power.</span>
       <b class="r-key">🔑</b><span data-i18n="how.key">Key and door: grab the key first, then open the locked door.</span>
+      <b class="r-fuse">💣5</b><span data-i18n="how.fuse">Lit bomb: defuse it before its number runs out.</span>
     </div>
     <button class="btn" id="btn-how-close" type="button" data-i18n="ok">Got it</button>
   </div>
@@ -470,6 +643,10 @@
     <p data-i18n="treasure.body">You have 3 keys. Open any chests you like.</p>
     <div class="keys-row" id="t-keys" aria-live="polite"></div>
     <div class="chests" id="chests"></div>
+    <div class="row won-card" id="t-card" hidden>
+      <div class="mini-card" id="tc-art" aria-hidden="true"></div>
+      <div class="row-text"><h3 id="tc-title">New card!</h3><p id="tc-line"></p></div>
+    </div>
     <button class="btn btn-ad" id="btn-t-ad" type="button" hidden><span class="tv" aria-hidden="true">📺</span><span data-i18n="treasure.more">+3 keys</span></button>
     <button class="btn btn-big btn-green" id="btn-t-done" type="button" data-i18n="treasure.done">Continue</button>
   </div>
@@ -584,6 +761,10 @@
     <p id="won-line"></p>
     <p class="stars-note" id="stars-note"></p>
     <div class="won-coins"><span class="coin-icon" aria-hidden="true"></span><span id="won-coins">+20</span></div>
+    <div class="row won-card" id="won-card" hidden>
+      <div class="mini-card" id="wc-art" aria-hidden="true"></div>
+      <div class="row-text"><h3 id="wc-title">New card!</h3><p id="wc-line"></p></div>
+    </div>
     <div class="row trial-offer" id="trial-offer" hidden>
       <span class="swatch" id="trial-swatch" aria-hidden="true"></span>
       <div class="row-text"><h3 id="trial-name">Ninja</h3><p id="trial-line"></p></div>
@@ -601,6 +782,102 @@
     <p id="lost-line"></p>
     <button class="btn btn-gold" id="btn-undo" type="button">Undo last move</button>
     <button class="btn btn-big btn-green" id="btn-retry" type="button" data-i18n="retry">Try again</button>
+  </div>
+</section>
+
+<section id="screen-rule" class="screen screen-dim" hidden>
+  <div class="card rule-card">
+    <span class="ad-tag" data-i18n="rule.tag">New!</span>
+    <div class="rule-art mini-card rar-e" id="rule-art" aria-hidden="true"></div>
+    <h2 data-i18n="rule.fuse.t">Lit bomb!</h2>
+    <p data-i18n="rule.fuse.b">The number on the bomb is how many moves you have left to reach it. Step in to defuse it. If it hits 0, boom.</p>
+    <button class="btn btn-big btn-green" id="btn-rule-ok" type="button" data-i18n="ok">Got it</button>
+  </div>
+</section>
+
+<section id="screen-album" class="screen screen-dim" hidden>
+  <div class="card album-card">
+    <div class="shop-head">
+      <h2 data-i18n="album">Album</h2>
+      <span class="chip"><span aria-hidden="true">🃏</span><span id="album-count">0/24</span></span>
+    </div>
+    <p class="album-lede" data-i18n="album.lede">Win levels to find cards. Bosses, treasure and the daily tower always give one.</p>
+    <div id="album-list" class="album-list"></div>
+    <button id="btn-album-back" class="btn btn-plain" type="button" data-i18n="back">Back</button>
+  </div>
+</section>
+
+<section id="screen-editor" class="screen screen-dim" hidden>
+  <div class="card ed-card">
+    <div class="shop-head">
+      <h2 data-i18n="ed.title">Tower builder</h2>
+      <button class="btn btn-plain ed-world" id="ed-world" type="button">🌍</button>
+    </div>
+    <div class="ed-start">
+      <span class="ed-lbl" data-i18n="ed.start">Hero power</span>
+      <button class="btn btn-plain ed-step" id="ed-start-minus" type="button" aria-label="−">−</button>
+      <input class="text-input ed-num" id="ed-start" type="number" inputmode="numeric" min="1" max="9999" aria-label="Hero power" data-i18n-label="ed.start">
+      <button class="btn btn-plain ed-step" id="ed-start-plus" type="button" aria-label="+">+</button>
+    </div>
+    <div class="ed-board" id="ed-board"></div>
+    <div class="ed-sel">
+      <b id="ed-sel-name"></b>
+      <small id="ed-sel-desc"></small>
+      <div class="ed-val" id="ed-val" hidden>
+        <span class="ed-lbl" id="ed-val-lbl">Power</span>
+        <button class="btn btn-plain ed-step" id="ed-val-minus" type="button" aria-label="−">−</button>
+        <input class="text-input ed-num" id="ed-val-in" type="number" inputmode="numeric" min="1" aria-labelledby="ed-val-lbl">
+        <button class="btn btn-plain ed-step" id="ed-val-plus" type="button" aria-label="+">+</button>
+      </div>
+    </div>
+    <div class="ed-palette" id="ed-palette" role="toolbar" aria-label="Floors" data-i18n-label="ed.tools"></div>
+    <p class="ed-status" id="ed-status" role="status"></p>
+    <div class="ed-codeline" id="ed-codeline" hidden>
+      <button class="ed-code" id="ed-code" type="button" aria-label="Copy code" data-i18n-label="code.copy"></button>
+      <small id="ed-code-note" aria-live="polite"></small>
+    </div>
+    <div class="btn-row ed-row1">
+      <button class="btn btn-green" id="btn-ed-play" type="button" data-i18n="ed.test">Test it</button>
+      <button class="btn" id="btn-ed-share" type="button"><span>📤 </span><span data-i18n="ed.share">Share</span></button>
+    </div>
+    <div class="btn-row ed-row2">
+      <button class="btn btn-plain" id="btn-ed-clear" type="button" data-i18n="ed.clear">Clear</button>
+      <button class="btn btn-plain" id="btn-ed-code" type="button" data-i18n="code.btn">Codes</button>
+    </div>
+    <button id="btn-ed-back" class="btn btn-plain ed-back" type="button" data-i18n="back">Back</button>
+  </div>
+</section>
+
+<section id="screen-code" class="screen screen-dim" hidden>
+  <div class="card">
+    <h2 data-i18n="code.title">Play a code</h2>
+    <p data-i18n="code.lede">Got a tower code from a friend? Type it here.</p>
+    <input class="text-input code-input tower-code" id="code-input" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="200" placeholder="ABCDE-FGHJK" aria-label="Tower code" data-i18n-label="code.title">
+    <p class="form-error" id="code-error" role="alert" hidden></p>
+    <button class="btn btn-big btn-green" id="btn-code-play" type="button" data-i18n="code.play">Play</button>
+    <div class="btn-row">
+      <button class="btn btn-plain" id="btn-code-build" type="button" data-i18n="ed.btn">Build</button>
+      <button class="btn btn-plain" id="btn-code-back" type="button" data-i18n="back">Back</button>
+    </div>
+  </div>
+</section>
+
+<section id="screen-xmas" class="screen screen-dim" hidden>
+  <div class="card xmas-card">
+    <span class="ad-tag" data-i18n="xmas.tag">Season</span>
+    <h2 data-i18n="xmas.title">Merry Christmas!</h2>
+    <p data-i18n="xmas.body">A gift under the tree every day until 6 January.</p>
+    <div class="row">
+      <span class="icon-tile tile-income" aria-hidden="true">🎁</span>
+      <div class="row-text"><h3 data-i18n="xmas.gift">Today's gift</h3><p id="xmas-gift-line"></p></div>
+      <button class="btn btn-buy btn-green" id="btn-xmas-gift" type="button">+150</button>
+    </div>
+    <div class="row">
+      <span class="swatch" id="xmas-swatch" aria-hidden="true"></span>
+      <div class="row-text"><h3 data-i18n="skin.santa">Santa</h3><p id="xmas-skin-line"></p></div>
+      <button class="btn btn-buy btn-gold" id="btn-xmas-skin" type="button" data-i18n="xmas.claim">Claim</button>
+    </div>
+    <button id="btn-xmas-back" class="btn btn-plain" type="button" data-i18n="back">Back</button>
   </div>
 </section>
 

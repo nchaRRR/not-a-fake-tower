@@ -13,6 +13,9 @@ export const SKINS = [
   { id: 'knight', cost: 500, body: 0xb9c3d1, head: 0xffd2b0, helmet: 0xdfe6ef, pack: 0x8a96a8, legs: 0x5d6878 },
   { id: 'blaze', cost: 800, body: 0xff8c3a, head: 0xffd2b0, helmet: 0xffbe2e, pack: 0xc95a1a, legs: 0x5a2a10 },
   { id: 'golden', cost: 1500, body: 0xffbe2e, head: 0xffd2b0, helmet: 0xffe07a, pack: 0xc98a00, legs: 0x8a5e00 },
+  // not for sale: the reward for the Bosses card set, and a free look during the Christmas season
+  { id: 'warlord', cost: 0, from: 'album', body: 0x5a2f9e, head: 0xffd2b0, helmet: 0xffbe2e, pack: 0x3a1d6b, legs: 0x2a1745 },
+  { id: 'santa', cost: 0, from: 'xmas', body: 0xd62839, head: 0xffd2b0, helmet: 0xf4f4f4, pack: 0x7a1020, legs: 0x2b2140 },
 ];
 
 export const HINT_PACKS = [
