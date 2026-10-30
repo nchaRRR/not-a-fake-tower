@@ -18,6 +18,8 @@ import { startMusic, setMusicEnabled, setSong } from './music.js';
 import { createAds } from './ads.js';
 import { createAccount } from './account.js';
 import { storeLink, openLink } from './promo.js';
+import { runOpening } from './opening.js';
+import { towerArt } from './onboard-art.js';
 import promoIcon from '../assets/promo-nfa-128.webp';
 import { scheduleNotifications, askNotificationPermission, planNotifications } from './notify.js';
 import { dayIndex, dailySpecN, dailySeed } from './daily.js';
@@ -1968,7 +1970,20 @@ function frame() {
 applyStatic();
 updateHints();
 goHome();
-maybeDaily();
+// Opening screen; on the very first launch the how-it-works pages, then straight into the ad intro.
+const obArt = towerArt();
+runOpening({
+  key: 'nfa-tower',
+  logo: '<h1 class="logo">Not a<br><span class="strike">Fake</span> Ad<span class="tower">TOWER</span></h1>',
+  pages: [1, 2, 3, 4].map((i) => ({ art: obArt[i - 1], title: t(`ob.${i}.t`), body: t(`ob.${i}.b`) })),
+  str: { presents: t('ob.presents'), notFake: t('ob.notfake'), skip: t('ob.skip'), next: t('ob.next'), start: t('ob.start') },
+  onboard: !save.seenIntro && save.level <= 1,
+  onTap: () => unlockAudio(),
+}).then(({ onboarded }) => {
+  track('opening_done', { onboarded });
+  if (onboarded && state === 'home') startIntro();
+  else maybeDaily();
+});
 resize();
 requestAnimationFrame(frame);
 track('session_start');

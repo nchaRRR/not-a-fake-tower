@@ -1,6 +1,11 @@
 // Every word the player reads, in English and Turkish.
 const STRINGS = {
   en: {
+    'ob.presents': 'presents', 'ob.notfake': 'NOT FAKE', 'ob.skip': 'Skip', 'ob.next': 'Next', 'ob.start': "Let's go!",
+    'ob.1.t': 'The tower game from those ads', 'ob.1.b': 'The hero with the power number? This time you can actually play it.',
+    'ob.2.t': 'Beat the weaker ones', 'ob.2.b': 'Tap a floor to step in. If you are stronger, you take the enemy\'s power.',
+    'ob.3.t': 'Swords, potions, traps', 'ob.3.b': 'Swords add power, potions double it, traps take it. Think about the order.',
+    'ob.4.t': 'Beat the boss, take the tower', 'ob.4.b': 'Beat the boss at the top to win. Worlds, a daily tower and more are waiting.',
     sponsored: 'Sponsored?',
     tagline: 'The tower game from those ads. Actually playable.',
     play: 'Play level {n}',
@@ -232,6 +237,11 @@ const STRINGS = {
     taunts: ['99% of players fail this level', 'Only 1% get this right', 'Think before you tap', 'Your IQ is about to be tested', 'Nobody passes level {n}', 'The ad lied. This one does not.'],
   },
   tr: {
+    'ob.presents': 'sunar', 'ob.notfake': 'SAHTE DEĞİL', 'ob.skip': 'Geç', 'ob.next': 'İleri', 'ob.start': 'Başla!',
+    'ob.1.t': 'O reklamlardaki kule oyunu', 'ob.1.b': 'Güç sayılı kahramanı hatırladın mı? Bu sefer gerçekten oynanıyor.',
+    'ob.2.t': 'Zayıf olanı yen', 'ob.2.b': 'Bir kata dokun, kahraman girsin. Düşmandan güçlüysen gücünü kendine katarsın.',
+    'ob.3.t': 'Kılıç, iksir, tuzak', 'ob.3.b': 'Kılıç güç ekler, iksir ikiye katlar, tuzak götürür. Sırayı iyi düşün.',
+    'ob.4.t': 'Boss\'u yen, kuleyi al', 'ob.4.b': 'En üstteki boss\'u yenince bölüm biter. Dünyalar, günlük kule ve dahası seni bekliyor.',
     sponsored: 'Sponsorlu?',
     tagline: 'O reklamlardaki kule oyunu. Gerçekten oynanıyor.',
     play: 'Oyna · Bölüm {n}',
