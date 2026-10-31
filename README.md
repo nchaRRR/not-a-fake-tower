@@ -21,9 +21,13 @@ node scripts/levels.mjs 200        # rebuild levels 1-200 → src/levels.json
 node scripts/levels.mjs 200 101    # keep 1-100, rebuild 101-200
 node scripts/daily.mjs 440         # daily towers from 25 Oct 2026 → src/daily.json
 node scripts/balance.mjs           # difficulty report (careful-player win rate per level)
+node scripts/test-puzzle.mjs       # rules of the puzzle pieces, fog fairness, order traps, share codes
+node scripts/depth.mjs --check     # the greedy bot must lose or miss stars on most levels past 20
 ```
 
-Rules, solver and generator live in `src/rules.js`. Every level is checked to be solvable, and its difficulty is tuned so a careful random player wins at the target rate for that level (`carefulTarget`).
+Rules, solver and generator live in `src/rules.js`. Every level is checked to be solvable, and its difficulty is tuned so a careful random player wins at the target rate for that level (`carefulTarget`). `scripts/levels.mjs` always writes the same file.
+
+Puzzle pieces (each taught on its own level, then mixed in): growing enemies (16), order traps (26), power gates (36), allies (46), fog and the spyglass (56). Every level from 4 on has three goals (beat it plus two of: fewest moves, most power, rescue the princess, no potion, no aids); each goal met is a star, and one run can always meet all three. Fog is fair: the level lists what hides, and `plan(level, { fair: true })` proves it can be won whatever the hidden floors turn out to be.
 
 ## Map of the code
 

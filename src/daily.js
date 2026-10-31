@@ -11,3 +11,5 @@ export function dailySpecN(date) {
   return [60, 14, 20, 27, 34, 42, 50][date.getDay()];
 }
 export const dailySeed = (d) => 500009 + d * 7717;
+// From this day on (9 November 2026) the daily tower can have growing enemies and power gates.
+export const DAILY_V2 = 15;

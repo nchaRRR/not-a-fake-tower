@@ -9,8 +9,8 @@ import { loadSave, writeSave, freshSave as loadSaveFresh } from './save.js';
 import { track } from './analytics.js';
 import { startTelemetry } from './telemetry.js';
 import { t, getLang, setLang, applyStatic, nextLang, LANG_NAMES } from './i18n.js';
-import { apply, solve, step, decodeLevel, buildLevel, setEvent, potionMult, swordValue, trapValue, fuseOut, solvePlain } from './rules.js';
-import { createEditor } from './editor.js';
+import { solve, step, decodeLevel, buildLevel, setEvent, potionMult, swordValue, trapValue, fuseOut, solvePlain, planPlain, plan, fightValue, hasGate, goalRules, goalsMet, FIGHTS } from './rules.js';
+import { createEditor, tileText } from './editor.js';
 import { pretty as prettyCode } from './codes.js';
 import { CARDS, CARD_SETS, cardById, cardArt, rollCard, setCards, setDone, DUP_COINS, DROP_CHANCE } from './cards.js';
 import { createSeason } from './season.js';
@@ -158,6 +158,14 @@ const G = {
   bulb: new THREE.SphereGeometry(0.075, 10, 8),
   wreath: new THREE.TorusGeometry(0.26, 0.09, 8, 20),
   snowCap: new THREE.ConeGeometry(RW * 0.82 * 0.46, 1.7 * 0.46, 4).rotateY(Math.PI / 4),
+  // the puzzle update: spyglass, growth arrow, fog cloud
+  tube: new THREE.CylinderGeometry(0.1, 0.14, 0.62, 14).rotateZ(Math.PI / 2),
+  eyepiece: new THREE.CylinderGeometry(0.065, 0.065, 0.22, 10).rotateZ(Math.PI / 2).translate(-0.4, 0, 0),
+  lensRing: new THREE.TorusGeometry(0.14, 0.035, 8, 18).rotateY(Math.PI / 2).translate(0.31, 0, 0),
+  lens: new THREE.CircleGeometry(0.12, 16).rotateY(Math.PI / 2).translate(0.32, 0, 0),
+  arrowHead: new THREE.ConeGeometry(0.17, 0.26, 10).translate(0, 0.13, 0),
+  arrowStem: new THREE.BoxGeometry(0.1, 0.22, 0.1).translate(0, -0.1, 0),
+  puff: new THREE.SphereGeometry(0.5, 14, 10),
 };
 const M = {
   wallA: mat(0xf3dcc0), wallB: mat(0xe8c9a6), cleared: mat(0xd8c7b6),
@@ -179,6 +187,10 @@ const M = {
   // Christmas: garland, blinking lights, snow on the roofs
   garland: mat(0x1f7a3a, { roughness: 0.9 }), snow: mat(0xffffff, { roughness: 1 }), bow: mat(0xe8453c),
   lights: [0xff4a4a, 0xffd34d, 0x4ad66b, 0x4aa8ff].map((c) => mat(c, { emissive: c, emissiveIntensity: 0.8, roughness: 0.3 })),
+  gate: mat(0x2a9d8f), gatePlank: mat(0x1f6f66), brass: mat(0xd9a441, { metalness: 0.6, roughness: 0.35 }),
+  lens: mat(0x9fe3ff, { emissive: 0x3fb0ff, emissiveIntensity: 0.6, roughness: 0.2 }),
+  grow: mat(0x5ee07a, { emissive: 0x1f8a54, emissiveIntensity: 0.5 }),
+  fog: mat(0xeef2f7, { roughness: 1, transparent: true, opacity: 0.96 }),
 };
 function makeKey(parent, s = 1) {
   const g = new THREE.Group();
@@ -204,6 +216,9 @@ applySkin();
 const enemySet = new FigureSet(scene, 30, { body: 0xe8453c, head: 0xffc9a8, helmet: 0x8e2620, pack: 0x8e2620, legs: 0x4a2230 });
 const bossSet = new FigureSet(scene, 2, { body: 0x5a2f9e, head: 0x9adf6a, helmet: 0xffbe2e, pack: 0x3a1d6b, legs: 0x2a1745 });
 const princessSet = new FigureSet(scene, 2, { body: 0xff7eb6, head: 0xffd2b0, helmet: 0xffbe2e, pack: 0xff9ac8, legs: 0xff7eb6 });
+// allies: waiting in their room, then walking behind the hero
+const allySet = new FigureSet(scene, 6, { body: 0x2eb872, head: 0xffd2b0, helmet: 0xffbe2e, pack: 0x1f8a54, legs: 0x23366b });
+const growHelmet = new THREE.Color(0x5ee07a);
 
 // ---------------------------------------------------------------- Christmas season
 // Santa hat on the hero (figure space: the face looks along -z, so the tip falls backwards)
@@ -395,6 +410,14 @@ let power = 0;
 let shownPower = 0;
 let history = []; // [{ h, power, keys, at }]
 let keys = 0;
+let allies = 0; // allies walking with the hero
+let revealed = new Set(); // fogged floors already seen ("t,k")
+let rescued = false; // the princess, for the goal
+let potionUsed = false;
+let goals = []; // this run's goals: [{ k, n }], the first is always "win"
+let spyMode = false;
+let allyHit = null; // { x, y } while an ally is fighting
+let boardMaxV = 1;
 let shieldArmed = false;
 let scopeOn = false;
 let bombMode = false;
@@ -484,7 +507,8 @@ function buildBoard() {
   clearBoard();
   applyWorld(level.n);
   const nt = level.towers.length;
-  const maxV = Math.max(1, ...level.towers.flat().filter((c) => c.v && (c.kind === 'enemy')).map((c) => c.v));
+  const maxV = Math.max(1, ...level.towers.flat().filter((c) => c.v && (c.kind === 'enemy' || c.kind === 'grow')).map((c) => fightValue(c, 10)));
+  boardMaxV = maxV;
   // hero pedestal on the left, towers to the right of it
   const span = nt * GAP;
   startX = -span / 2 - 0.4;
@@ -519,6 +543,16 @@ function buildBoard() {
     return tw.map((c, k) => {
       const cell = { ...c, x: x + 0.45, y: k * FH + SLAB, gone: false, anim: null, obj: null, label: null };
       if (c.kind === 'enemy' || c.kind === 'shield') cell.scale = 1.3 + 0.55 * Math.sqrt(Math.min(1, c.v / maxV));
+      if (c.kind === 'grow') {
+        // a growing enemy: a green arrow over its shoulder, and it swells as it grows (see refreshLabels)
+        cell.scale = 1.3 + 0.55 * Math.sqrt(Math.min(1, c.v / maxV));
+        const g = new THREE.Group();
+        addMesh(G.arrowHead, M.grow, 0, 0, 0, g);
+        addMesh(G.arrowStem, M.grow, 0, 0, 0, g);
+        board.add(g);
+        cell.arrow = g;
+      }
+      if (c.kind === 'ally') { cell.scale = 1.5; cell.x = x + 0.2; }
       if (c.kind === 'shield') {
         // a big round shield held toward the hero
         const g = new THREE.Group();
@@ -590,6 +624,34 @@ function buildBoard() {
         board.add(g);
         cell.obj = g;
       }
+      if (c.kind === 'spy') {
+        // a brass spyglass
+        const g = new THREE.Group();
+        addMesh(G.tube, M.brass, 0, 0, 0, g);
+        addMesh(G.eyepiece, M.brass, 0, 0, 0, g);
+        addMesh(G.lensRing, M.gold, 0, 0, 0, g);
+        addMesh(G.lens, M.lens, 0, 0, 0, g);
+        g.rotation.z = 0.35;
+        g.scale.setScalar(1.25);
+        g.position.set(cell.x, cell.y + 0.6, 0.1);
+        board.add(g);
+        cell.obj = g;
+      }
+      if (c.kind === 'gate') {
+        // a teal door that only swings open at the right power (the number is on its sign)
+        cell.x = x;
+        const dw = RW - 0.36;
+        const g = new THREE.Group();
+        const pivot = new THREE.Group();
+        pivot.position.set(-dw / 2, 0, 0);
+        g.add(pivot);
+        addMesh(G.door, M.gate, dw / 2, (FH - 0.36) / 2 + 0.02, 0, pivot);
+        for (let i = 0; i < 4; i++) addMesh(G.plank, M.gatePlank, dw / 2, 0.3 + i * 0.42, 0.07, pivot);
+        g.position.set(x, cell.y, RD / 2 - 0.25);
+        board.add(g);
+        cell.obj = g;
+        cell.pivot = pivot;
+      }
       if (c.kind === 'lock') {
         // a door hinged on its left edge, with a padlock in the middle
         cell.x = x;
@@ -611,13 +673,38 @@ function buildBoard() {
         cell.pivot = pivot;
         cell.padlock = lock;
       }
-      if (c.kind !== 'princess' && c.kind !== 'key' && c.kind !== 'lock') {
+      if (c.kind !== 'princess' && c.kind !== 'key' && c.kind !== 'lock' && c.kind !== 'spy') {
         const big = c.kind === 'boss';
-        const lab = makeCountLabel(big ? 0.95 : 0.78);
-        const headY = c.kind === 'enemy' || c.kind === 'shield' || big ? 0.78 * cell.scale + 0.3 : c.kind === 'trap' ? 0.95 : c.kind === 'curse' ? 1.35 : 1.25;
+        const lab = makeCountLabel(big ? 0.95 : c.kind === 'ally' ? 0.6 : 0.78);
+        const figure = c.kind === 'enemy' || c.kind === 'shield' || c.kind === 'grow' || c.kind === 'ally' || big;
+        const headY = figure ? 0.78 * cell.scale + 0.3 : c.kind === 'trap' ? 0.95 : c.kind === 'curse' ? 1.35 : c.kind === 'gate' ? FH * 0.55 : 1.25;
         lab.position.set(cell.x, cell.y + headY, 0.6);
         board.add(lab);
         cell.label = lab;
+        cell.headY = headY;
+      }
+      if (c.kind === 'grow') {
+        // how much it gains per move, in small green print next to it
+        const lab = makeCountLabel(0.62);
+        board.add(lab);
+        cell.growLabel = lab;
+      }
+      if (c.fog) {
+        // a cloud over the room and a question mark, until the floor shows itself
+        const g = new THREE.Group();
+        [[-0.55, 0.55, 0.9], [0.05, 0.45, 1.05], [0.6, 0.6, 0.85], [-0.3, 1.25, 0.8], [0.4, 1.3, 0.85], [0, 0.95, 1]].forEach(([px, py, sc]) => {
+          const m = addMesh(G.puff, M.fog, px, py, 0, g);
+          m.scale.set(sc, sc * 0.85, 0.75);
+          m.castShadow = false;
+        });
+        g.position.set(x, k * FH + SLAB, 0.15);
+        board.add(g);
+        cell.fogObj = g;
+        const q = makeCountLabel(0.8);
+        q.position.set(x, k * FH + SLAB + FH * 0.5, 0.95);
+        q.userData.set('?', '#ffffff');
+        board.add(q);
+        cell.fogLabel = q;
       }
       return cell;
     });
@@ -634,32 +721,97 @@ function heroHome() {
 
 function syncBoard() {
   // visibility from h; labels coloured against current power
+  revealFronts(false);
   cells.forEach((tw, ti) => tw.forEach((c, k) => {
     c.gone = k < h[ti];
+    c.hidden = !!c.fog && !revealed.has(ti + ',' + k);
     c.anim = null;
     c.taking = false;
     c.dx = 0;
     c.pulse = 0;
     if (c.obj) {
-      c.obj.visible = !c.gone;
-      c.obj.scale.setScalar(c.kind === 'potion' ? 1.25 : 1);
+      c.obj.visible = !c.gone && !c.hidden;
+      c.obj.scale.setScalar(c.kind === 'potion' || c.kind === 'spy' ? 1.25 : 1);
       c.obj.position.x = c.x;
-      if (c.kind === 'trap' || c.kind === 'lock') c.obj.position.y = c.y;
-      if (c.pivot) { c.pivot.rotation.y = 0; c.padlock.visible = true; c.padlock.scale.setScalar(1); }
+      if (c.kind === 'trap' || c.kind === 'lock' || c.kind === 'gate') c.obj.position.y = c.y;
+      if (c.pivot) c.pivot.rotation.y = 0;
+      if (c.padlock) { c.padlock.visible = true; c.padlock.scale.setScalar(1); }
       if (c.kind === 'sword') c.obj.rotation.z = -0.5;
       if (c.spark) c.spark.visible = true;
     }
-    if (c.label) c.label.visible = !c.gone;
+    if (c.label) c.label.visible = !c.gone && !c.hidden;
+    if (c.growLabel) c.growLabel.visible = !c.gone && !c.hidden;
+    if (c.arrow) c.arrow.visible = !c.gone && !c.hidden;
+    if (c.fogObj) { c.fogObj.visible = !c.gone && c.hidden; c.fogObj.scale.setScalar(1); c.fogLabel.visible = c.fogObj.visible; }
   }));
   refreshLabels();
 }
 
+// ---------------------------------------------------------------- fog
+// A fogged floor shows itself once it is the lowest floor of its tower: you always see what you
+// step into. A spyglass (floor or booster) clears more. The fog list says what hides, not where.
+function revealCell(ti, k, animate) {
+  const key = ti + ',' + k;
+  if (revealed.has(key)) return;
+  revealed.add(key);
+  const c = cells[ti] && cells[ti][k];
+  if (!c || !c.fog) return;
+  c.hidden = false;
+  const show = () => {
+    if (c.gone) return;
+    if (c.obj) c.obj.visible = true;
+    if (c.label) c.label.visible = true;
+    if (c.growLabel) c.growLabel.visible = true;
+    if (c.arrow) c.arrow.visible = true;
+  };
+  if (!animate) { if (c.fogObj) { c.fogObj.visible = false; c.fogLabel.visible = false; } show(); return; }
+  c.fogLabel.visible = false;
+  burst(towerX[ti], c.y + 1, [0xffffff, 0xdfe6ef, 0xbfe0ff], 14, 2);
+  show();
+  tween(0.35, (q) => { c.fogObj.scale.set(1 + q * 0.6, 1 + q * 0.4, 1); if (q >= 1) c.fogObj.visible = false; });
+}
+function revealFronts(animate) {
+  if (!level) return;
+  level.towers.forEach((tw, ti) => { if (h[ti] < tw.length && tw[h[ti]].fog) revealCell(ti, h[ti], animate); });
+}
+function revealTower(ti, animate) {
+  level.towers[ti].forEach((c, k) => { if (c.fog && k >= h[ti]) revealCell(ti, k, animate); });
+}
+const fogLeft = () => level.towers.some((tw, ti) => tw.some((c, k) => c.fog && k >= h[ti] && !revealed.has(ti + ',' + k)));
+// "In the fog: 12 · +5 · x2": what hides, in no particular order (seen ones are crossed out)
+function renderFogBar() {
+  const bar = $('fog-bar');
+  const list = [];
+  level.towers.forEach((tw, ti) => tw.forEach((c, k) => { if (c.fog) list.push({ c, seen: revealed.has(ti + ',' + k) || k < h[ti] }); }));
+  bar.hidden = !list.length || state !== 'play';
+  if (!list.length) return;
+  // the order on the board must not leak: sort by kind and number
+  list.sort((a, b) => tileText(a.c).localeCompare(tileText(b.c)) || a.seen - b.seen);
+  bar.innerHTML = fogChips(list);
+}
+const fogChips = (list) => `<span class="fog-label">☁ ${t('fog.list')}</span>` + list.map(({ c, seen }) => `<span class="fog-chip k-${c.kind}${seen ? ' seen' : ''}">${tileText(c).replace(/\d{4,}/g, (d) => fmt(+d))}</span>`).join('');
+
+const gateText = (c) => (c.w === c.v ? '=' + fmt(c.v) : fmt(c.v) + '–' + fmt(c.w));
 function refreshLabels() {
   updateScope();
+  const m = movesDone();
   for (const tw of cells) for (const c of tw) {
     if (!c.label || c.gone) continue;
-    if (c.kind === 'enemy' || c.kind === 'boss') c.label.userData.set(fmt(c.v), c.v >= power ? '#ff6f5e' : '#7dffb0');
-    else if (c.kind === 'shield') c.label.userData.set('2×' + fmt(c.v), 2 * c.v >= power ? '#ff6f5e' : '#7dffb0');
+    // with an ally along, the next fight is won whatever the number
+    const helped = allies > 0 && c.kind !== 'boss';
+    if (c.kind === 'enemy' || c.kind === 'boss') c.label.userData.set(fmt(c.v), c.v >= power && !helped ? '#ff6f5e' : '#7dffb0');
+    else if (c.kind === 'shield') c.label.userData.set('2×' + fmt(c.v), 2 * c.v >= power && !helped ? '#ff6f5e' : '#7dffb0');
+    else if (c.kind === 'grow') {
+      const v = fightValue(c, m);
+      c.label.userData.set(fmt(v), v >= power && !helped ? '#ff6f5e' : '#7dffb0');
+      c.growLabel.userData.set('+' + fmt(c.w), '#a8ff8a');
+      c.scale = 1.3 + 0.55 * Math.sqrt(Math.min(1.6, v / boardMaxV));
+      c.label.position.y = c.y + 0.78 * c.scale + 0.3;
+      // the growth sits on the room side of the enemy, the arrow under it
+      c.growLabel.position.set(c.x - 0.66, c.y + 0.78 * c.scale - 0.12, 0.62);
+      c.arrow.position.set(c.x - 0.66, c.y + 0.78 * c.scale - 0.62, 0.4);
+    } else if (c.kind === 'gate') c.label.userData.set(gateText(c), power >= c.v && power <= c.w ? '#7dffb0' : '#ff6f5e');
+    else if (c.kind === 'ally') c.label.userData.set(t('ally.tag'), '#7dffb0');
     else if (c.kind === 'sword') c.label.userData.set('+' + fmt(swordValue(c)), '#7dffb0');
     else if (c.kind === 'potion') c.label.userData.set('x' + potionMult(), '#d4b8ff');
     else if (c.kind === 'trap') c.label.userData.set('-' + fmt(trapValue(c)), '#ffb766');
@@ -669,6 +821,73 @@ function refreshLabels() {
       c.label.userData.set(String(left), left <= 1 ? '#ff6f5e' : left <= 3 ? '#ffb766' : '#ffe07a');
     }
   }
+  renderHudBars();
+}
+
+// ---------------------------------------------------------------- goals (stars)
+// Every level's first goal is to win; levels 4+ add two more from levels.json. Each goal met is a star.
+// Levels 1-3 have only "win" and keep the old rule (3 stars without hints or undo).
+function runGoals(L, scaled) {
+  if (L.custom || L.daily || L.n < 1) return [];
+  const out = [{ k: 'win' }, ...(L.goals || []).map((g) => ({ ...g }))];
+  // Extra start power from the shop raises "end with N power" by what it is sure to add: the run that
+  // met the goal keeps every extra point to the end, except that each curse can halve it. (The week's
+  // events only ever add, so the goal stays reachable.)
+  const pg = out.find((g) => g.k === 'power');
+  if (pg && scaled && power > L.start) {
+    const curses = L.towers.flat().filter((c) => c.kind === 'curse').length;
+    pg.n += Math.floor((power - L.start) / 2 ** curses);
+  }
+  return out;
+}
+const hasBoss = () => level.towers.some((tw) => tw.some((c) => c.kind === 'boss'));
+function goalLine(g) {
+  if (g.k === 'win') return t(hasBoss() ? 'goal.win' : 'goal.clear');
+  return t('goal.' + g.k, { n: fmt(g.n || 0) });
+}
+// per goal: 'met', 'miss' or '' (still open)
+function goalStatus() {
+  const won = state === 'won';
+  const m = won ? finalMoves : movesDone();
+  return goals.map((g) => {
+    if (g.k === 'win') return won ? 'met' : '';
+    if (g.k === 'moves') return m > g.n || (m >= g.n && !won) ? 'miss' : won ? 'met' : '';
+    if (g.k === 'power') return power >= g.n ? 'met' : won ? 'miss' : '';
+    if (g.k === 'princess') return rescued ? 'met' : won ? 'miss' : '';
+    if (g.k === 'nopotion') return potionUsed ? 'miss' : won ? 'met' : '';
+    if (g.k === 'noaid') return aids ? 'miss' : won ? 'met' : '';
+    return '';
+  });
+}
+const goalPillText = (g) => ({ moves: `👣 ${movesDone()}/${g.n}`, power: `💪 ${fmt(g.n)}`, princess: '👸', nopotion: '🚫 x2', noaid: '🚫 💡' })[g.k];
+let barsHeight = -1;
+function renderHudBars() {
+  if (!level) return;
+  const bar = $('goal-bar');
+  const show = goals.length > 1 && state === 'play';
+  bar.hidden = !show;
+  if (show) {
+    const st = goalStatus();
+    bar.innerHTML = goals.map((g, i) => (g.k === 'win' ? '' : `<span class="goal-pill ${st[i]}" title="${goalLine(g)}"><i>★</i>${goalPillText(g)}</span>`)).join('');
+  }
+  renderFogBar();
+  // the bars push the towers down a little: refit when their height changes
+  const hh = $('hud').hidden ? 0 : $('hud-bars').offsetHeight;
+  if (hh !== barsHeight) { barsHeight = hh; resize(); }
+}
+function goalItems(st) {
+  return goals.map((g, i) => `<li class="${st ? st[i] : ''}"><span class="g-star" aria-hidden="true">${st ? (st[i] === 'met' ? '✓' : '✗') : '★'}</span><span class="g-text">${goalLine(g)}</span></li>`).join('');
+}
+// the goals card at the start of a level (and the fog list, when there is fog)
+function showGoals() {
+  $('goals-tag').textContent = $('hud-level').textContent;
+  $('goals-list').innerHTML = goalItems(null);
+  const fog = [];
+  level.towers.forEach((tw) => tw.forEach((c) => { if (c.fog) fog.push({ c, seen: false }); }));
+  fog.sort((a, b) => tileText(a.c).localeCompare(tileText(b.c)));
+  $('goals-fog').hidden = !fog.length;
+  $('goals-fog').innerHTML = fog.length ? fogChips(fog) : '';
+  showScreen('screen-goals');
 }
 // every move clears exactly one floor, so the floors cleared are the moves made (bomb deadlines)
 const movesDone = () => h.reduce((a, b) => a + b, 0);
@@ -697,7 +916,10 @@ function resize() {
   renderer.setSize(w, hgt, false);
   // the HUD is drawn larger on tablets (--ui), so the strips it covers grow with it
   const ui = uiScale();
-  const top = 118 * ui;
+  // the goal pills and the fog list sit under the taunt: keep the towers below them
+  const bars = $('hud').hidden ? null : $('hud-bars');
+  const barsBottom = bars && bars.offsetHeight ? bars.getBoundingClientRect().bottom + 8 : 0;
+  const top = Math.max(118 * ui, barsBottom);
   const bottom = 158 * ui;
   const usable = Math.max(100, hgt - top - bottom);
   let ww = view.maxX - view.minX;
@@ -799,11 +1021,15 @@ function startLevel(n, data = null) {
     else if (trialLevel !== key) { trialSkin = null; trialLevel = null; applySkin(); }
   }
   const aidKey = data ? 'daily' : n;
+  // a new level (not a restart) opens with its goals card
+  const freshStart = aidKey !== aidsLevel;
   if (aidKey !== aidsLevel) { aids = 0; aidsLevel = aidKey; }
   freeUndo = true;
   shieldArmed = false;
   scopeOn = false;
   bombMode = false;
+  spyMode = false;
+  allyHit = null;
   dangerFrames = [];
   bannerShown = false;
   timeScale = 1;
@@ -812,14 +1038,21 @@ function startLevel(n, data = null) {
   for (const m of confetti) { scene.remove(m); m.material.dispose(); }
   confetti = [];
   level = data ? { ...data, towers: data.towers.map((tw) => tw.map((c) => ({ ...c }))) } : levelData(n);
-  // towers from the builder are played as built: no shop power, no weekly event
-  setEvent(level.custom ? null : EVENT.id);
+  // towers from the builder are played as built: no shop power, no weekly event. Neither on levels
+  // with a power gate: more power is not always better there.
+  const plain = !!level.custom || hasGate(level.towers);
+  setEvent(plain ? null : EVENT.id);
   h = level.towers.map(() => 0);
-  power = level.custom ? level.start : startPower(level.start, save.up.power);
+  power = plain ? level.start : startPower(level.start, save.up.power);
   startP = power;
   shownPower = power;
   history = [];
   keys = 0;
+  allies = 0;
+  revealed = new Set();
+  rescued = false;
+  potionUsed = false;
+  goals = runGoals(level, !plain);
   armed = false;
   hero.alive = true;
   hero.spin = 0;
@@ -840,6 +1073,7 @@ function startLevel(n, data = null) {
   updateHints();
   updateBoosts();
   $('boosts').hidden = n < 4 || !!level.custom;
+  $('boost-spy').hidden = !level.towers.some((tw) => tw.some((c) => c.fog));
   if (n > 1 && (n - 1) % 25 === 0 && !level.custom) {
     const w = worldOf(n);
     showBanner(t('world.' + w.id), 'rgba(43, 33, 64, 0.8)');
@@ -853,14 +1087,52 @@ function startLevel(n, data = null) {
     $('taunt').textContent = t(level.mine ? 'ed.taunt' : 'code.taunt');
   } else if (level.daily) $('hud-level').textContent = t('dt.hud');
   const kinds = new Set(level.towers.flat().map((c) => c.kind));
+  if (level.towers.some((tw) => tw.some((c) => c.fog))) kinds.add('fog');
+  if (level.order) kinds.add('order');
+  if (goals.length > 1) kinds.add('goals');
   save.seen = save.seen || {};
-  const fresh = ['key', 'curse', 'shield', 'fuse'].find((k) => kinds.has(k) && !save.seen[k]);
+  const fresh = ['key', 'curse', 'shield', 'fuse', 'goals', 'grow', 'order', 'gate', 'ally', 'fog', 'spy'].find((k) => kinds.has(k) && !save.seen[k]);
   if (fresh) { save.seen[fresh] = 1; writeSave(save); }
-  setTip(n <= 1 && !save.stars[1] && !level.custom ? t('tip.first') : fresh ? t('tip.' + fresh) : '', fresh ? 5000 : 0);
+  let tip = n <= 1 && !save.stars[1] && !level.custom ? t('tip.first') : fresh ? t(fresh === 'order' ? 'tip.order.' + level.order : 'tip.' + fresh) : '';
+  // gates switch the shop's extra power off: say so once
+  if (!tip && plain && !level.custom && save.up.power > 0 && !save.seen.gatePlain) { save.seen.gatePlain = 1; writeSave(save); tip = t('tip.gatePlain'); }
+  renderHudBars();
+  // the tip waits until the cards are closed
+  pendingTip = tip ? { text: tip, ms: fresh ? 6000 : 4000 } : null;
+  pendingGoals = freshStart && goals.length > 1;
   // a brand-new kind of floor gets its own card the first time
-  if (fresh === 'fuse') { $('rule-art').innerHTML = cardArt(cardById('bomb')); showScreen('screen-rule'); track('rule_intro', { kind: fresh }); }
+  if (RULES[fresh]) showRule(fresh);
+  else if (pendingGoals) { pendingGoals = false; showGoals(); }
+  else flushTip();
   updateCoins();
   if (!level.custom) track('level_start', { level: n });
+}
+
+// The "New!" card for a new kind of floor: art and text.
+const RULES = { fuse: 'card', grow: '5▲', order: '⇅', gate: '=24', ally: '🤝', fog: '☁️', goals: '★' };
+let pendingTip = null;
+let pendingGoals = false;
+function showRule(kind) {
+  const art = RULES[kind];
+  $('rule-art').hidden = art !== 'card';
+  $('rule-emoji').hidden = art === 'card';
+  if (art === 'card') $('rule-art').innerHTML = cardArt(cardById('bomb'));
+  else $('rule-emoji').textContent = art;
+  $('rule-title').textContent = t('rule.' + kind + '.t');
+  $('rule-body').textContent = t(kind === 'order' ? 'rule.order.' + level.order : 'rule.' + kind + '.b');
+  showScreen('screen-rule');
+  track('rule_intro', { kind });
+}
+function flushTip() {
+  if (pendingTip) setTip(pendingTip.text, pendingTip.ms);
+  else setTip('');
+  pendingTip = null;
+}
+// closing the rule card or the goals card
+function closeCards() {
+  if (pendingGoals) { pendingGoals = false; showGoals(); return; }
+  showScreen(null);
+  flushTip();
 }
 
 let tipTimer = 0;
@@ -873,7 +1145,7 @@ function setTip(text, ms = 0) {
 }
 
 function remainingLevel() {
-  return { start: power, keys, moves: movesDone(), towers: level.towers.map((tw, i) => tw.slice(h[i])) };
+  return { start: power, keys, allies, moves: movesDone(), towers: level.towers.map((tw, i) => tw.slice(h[i])) };
 }
 
 function roomFrame(ti, material) {
@@ -900,7 +1172,7 @@ function updateScope() {
   level.towers.forEach((tw, t) => {
     if (h[t] >= tw.length) return;
     const cell = tw[h[t]];
-    const ns = step(power, keys, cell);
+    const ns = step(power, keys, cell, movesDone(), allies);
     if (!ns) return;
     let bad = ns.p < 0;
     if (!bad && cell.kind !== 'boss') {
@@ -909,9 +1181,9 @@ function updateScope() {
       bad = fuseOut(level.towers, h2, movesDone() + 1);
     }
     if (!bad && cell.kind !== 'boss' && cell.kind !== 'princess') {
-      const after = { start: ns.p, keys: ns.k, moves: movesDone() + 1, towers: level.towers.map((x, i) => x.slice(h[i] + (i === t ? 1 : 0))) };
+      const after = { start: ns.p, keys: ns.k, allies: ns.a, moves: movesDone() + 1, towers: level.towers.map((x, i) => x.slice(h[i] + (i === t ? 1 : 0))) };
       const left = after.towers.some((x) => x.length);
-      if (left) bad = solve(after).wins === 0;
+      if (left) bad = !plan(after, {});
     }
     if (bad) dangerFrames.push(roomFrame(t, M.danger));
   });
@@ -943,41 +1215,63 @@ function hint() {
   sfx.tap();
   const free = freeHintReady();
   if (!free && save.hints <= 0) { setTip(t('tip.nohints'), 2200); openShop('hints', 'play'); return; }
-  const sol = solve(remainingLevel());
-  if (!sol.wins) { setTip(t('tip.stuck'), 2600); return; }
-  if (hintTower === sol.path[0]) return;
+  // plan stops at the first win it finds (solve counts every order: far too slow on a phone)
+  const any = plan(remainingLevel(), {});
+  if (!any) { setTip(t('tip.stuck'), 2600); return; }
+  // better: a move that still meets every goal not lost yet (falls back to any winning move)
+  const st = goalStatus();
+  const rules = {};
+  goals.forEach((g, i) => {
+    if (st[i] === 'miss') return;
+    if (g.k === 'moves') rules.maxMoves = g.n - movesDone();
+    if (g.k === 'power') rules.minPower = g.n;
+    if (g.k === 'princess' && !rescued) rules.princess = true;
+    if (g.k === 'nopotion') rules.noPotion = true;
+  });
+  const best3 = Object.keys(rules).length ? plan(remainingLevel(), { ...rules, budget: 60000 }) : null;
+  const first = best3 ? best3[0] : any[0];
+  if (hintTower === first) return;
   if (free) save.freeHint = dayKey(new Date());
   else save.hints--;
   writeSave(save);
   updateHints();
-  setHint(sol.path[0]);
+  setHint(first);
   setTip(free ? t('hint.usedFree') : t('tip.hint'), 1800);
   aids++;
   track('hint', { level: level.n, free });
 }
 
 // ---------------------------------------------------------------- boosters
-const BOOSTS = ['shield', 'scope', 'bomb'];
-const BOOST_ICON = { shield: '🛡️', scope: '🔭', bomb: '💣' };
-function updateBoosts() {
+const BOOSTS = ['shield', 'scope', 'bomb', 'spy'];
+const BOOST_ICON = { shield: '🛡️', scope: '🔭', bomb: '💣', spy: '🔍' };
+// the spyglass booster came with the puzzle update: older saves get their free one too
+const boostBag = () => {
   save.boost = save.boost || { shield: 1, scope: 1, bomb: 1 };
+  if (save.boost.spy === undefined) save.boost.spy = 1;
+  return save.boost;
+};
+function updateBoosts() {
+  boostBag();
   for (const b of BOOSTS) {
     const n = save.boost[b] || 0;
     $('bc-' + b).textContent = n > 0 ? String(n) : '+';
-    const on = (b === 'shield' && shieldArmed) || (b === 'scope' && scopeOn) || (b === 'bomb' && bombMode);
+    const on = (b === 'shield' && shieldArmed) || (b === 'scope' && scopeOn) || (b === 'bomb' && bombMode) || (b === 'spy' && spyMode);
     $('boost-' + b).classList.toggle('on', on);
   }
 }
 function useBoost(b) {
   if (state !== 'play' || busy || introAd) return;
-  save.boost = save.boost || { shield: 1, scope: 1, bomb: 1 };
+  boostBag();
   if (b === 'bomb' && bombMode) { bombMode = false; setTip(''); updateBoosts(); return; }
+  if (b === 'spy' && spyMode) { spyMode = false; setTip(''); updateBoosts(); return; }
+  if (b === 'spy' && !fogLeft()) { setTip(t('boost.spyNone'), 2000); return; }
   if ((b === 'shield' && shieldArmed) || (b === 'scope' && scopeOn)) return;
   if (!(save.boost[b] > 0)) { setTip(t('boost.none'), 2000); openShop('power', 'play'); return; }
   sfx.buy();
-  if (b === 'bomb') {
-    bombMode = true;
-    setTip(t('boost.bombPick'));
+  if (b === 'bomb' || b === 'spy') {
+    bombMode = b === 'bomb';
+    spyMode = b === 'spy';
+    setTip(t(b === 'bomb' ? 'boost.bombPick' : 'boost.spyPick'));
     updateBoosts();
     return;
   }
@@ -989,15 +1283,29 @@ function useBoost(b) {
   if (b === 'scope') { scopeOn = true; updateScope(); setTip(t('boost.scopeOn'), 2600); }
   updateBoosts();
 }
+// spyglass booster: clears the fog from one tower
+function spyTower(ti) {
+  if (!level.towers[ti].some((c, k) => c.fog && k >= h[ti] && !revealed.has(ti + ',' + k))) { setTip(t('boost.spyClear'), 2000); sfx.gateBad(); return; }
+  spyMode = false;
+  save.boost.spy--;
+  aids++;
+  writeSave(save);
+  track('boost', { id: 'spy', level: level.n });
+  sfx.gateGood();
+  revealTower(ti, true);
+  setTip('');
+  updateBoosts();
+  refreshLabels();
+}
 async function bombTower(ti) {
   const c = cells[ti][h[ti]];
-  if (['boss', 'princess', 'key', 'lock', 'fuse'].includes(c.kind)) { setTip(t('boost.bombNo'), 2200); sfx.gateBad(); return; }
+  if (['boss', 'princess', 'key', 'lock', 'fuse', 'gate', 'ally', 'spy'].includes(c.kind)) { setTip(t('boost.bombNo'), 2200); sfx.gateBad(); return; }
   bombMode = false;
   save.boost.bomb--;
   aids++;
   writeSave(save);
   track('boost', { id: 'bomb', level: level.n });
-  history.push({ h: h.slice(), power, keys, armed, at: hero.at });
+  history.push({ h: h.slice(), power, keys, allies, rescued, potionUsed, armed, at: hero.at });
   busy = true;
   const my = gen;
   setTip('');
@@ -1007,12 +1315,14 @@ async function bombTower(ti) {
   shake = 0.9;
   burst(towerX[ti], c.y + 1, [0xff8a3a, 0xffd34d, 0x2b2140, 0xffffff], 36, 4.5);
   if (c.label) c.label.visible = false;
-  if (c.kind === 'enemy' || c.kind === 'shield') c.anim = { kind: 'fly', t: 0 };
+  if (FIGHTS.has(c.kind)) c.anim = { kind: 'fly', t: 0 };
   else if (c.obj) c.obj.visible = false;
+  if (c.growLabel) { c.growLabel.visible = false; c.arrow.visible = false; }
   await wait(0.5);
   if (my !== gen) return;
   c.gone = true;
   h[ti]++;
+  revealFronts(true);
   busy = false;
   updateBoosts();
   refreshLabels();
@@ -1048,7 +1358,17 @@ async function move(ti) {
   if (state !== 'play' || busy || !hero.alive) return;
   if (h[ti] >= cells[ti].length) return;
   if (bombMode) { bombTower(ti); return; }
+  if (spyMode) { spyTower(ti); return; }
   const door = cells[ti][h[ti]];
+  if (door.kind === 'gate' && !step(power, keys, door)) {
+    // the wrong power: the gate stays shut
+    sfx.gateBad();
+    setTip(t('tip.gateShut', { a: gateText(door), b: fmt(power) }), 2200);
+    popup(gateText(door), door.x, door.y + 1.9, 'bad');
+    const g = door.obj;
+    tween(0.35, (q) => { g.position.x = door.x + Math.sin(q * Math.PI * 6) * 0.07 * (1 - q); });
+    return;
+  }
   if (door.kind === 'lock' && keys === 0) {
     // not allowed: rattle the door
     sfx.gateBad();
@@ -1067,7 +1387,7 @@ async function move(ti) {
   unlockAudio();
   const k = h[ti];
   const c = cells[ti][k];
-  history.push({ h: h.slice(), power, keys, armed, at: hero.at });
+  history.push({ h: h.slice(), power, keys, allies, rescued, potionUsed, armed, at: hero.at });
 
   // get there: hop across at the hero's height (or drop down), then climb floor by floor
   const fromX = hero.x;
@@ -1107,8 +1427,12 @@ async function move(ti) {
   if (my !== gen) return;
   hero.at = { ti, k };
   hero.facing = -Math.PI / 2;
-  const np = apply(power, c);
-  const fight = c.kind === 'enemy' || c.kind === 'boss' || c.kind === 'shield';
+  const m0 = movesDone();
+  const ns = step(power, keys, c, m0, allies);
+  const np = ns.p;
+  // what the fight is about (a growing enemy counts at its power of this move)
+  const fv = FIGHTS.has(c.kind) ? fightValue(c, m0) : c.v;
+  const fight = FIGHTS.has(c.kind) || c.kind === 'boss';
 
   if (c.kind === 'boss') {
     // the boss gets a proper fight: a roar, three clashes, then slow motion on the last blow
@@ -1140,6 +1464,30 @@ async function move(ti) {
     popup('+' + fmt(c.v), c.x, c.y + 1.8, 'gold');
     await setPower(np, 0.5);
     sfx.coin();
+  } else if (ns.ally) {
+    // the ally runs past the hero and takes this one on; he keeps half of what it is worth
+    const ax = hero.x - 0.6;
+    allyHit = { x: ax, y: hero.y };
+    await tween(0.24, (q) => { allyHit.x = ax + (c.x - 0.55 - ax) * ease(q); allyHit.y = hero.y + Math.sin(Math.PI * q) * 0.5; });
+    if (my !== gen) return;
+    await tween(0.16, (q) => { allyHit.x = c.x - 0.55 + Math.sin(Math.PI * q) * 0.3; });
+    if (my !== gen) return;
+    sfx.hit();
+    buzz(15);
+    spark(c.x - 0.2, c.y + 0.75);
+    shake = Math.max(shake, 0.3);
+    c.anim = { kind: 'fly', t: 0 };
+    sfx.boom();
+    if (c.label) c.label.visible = false;
+    if (c.growLabel) { c.growLabel.visible = false; c.arrow.visible = false; }
+    popup(t('ally.hit'), c.x, c.y + 2, 'good');
+    popup('+' + fmt(np - power), toX, c.y + 1.3, 'good');
+    // his job is done: he heads home with his half
+    allies = ns.a;
+    allyHit = null;
+    save.stats.allies = (save.stats.allies || 0) + 1;
+    await setPower(np, 0.4);
+    sfx.coin();
   } else if (fight) {
     // lunge
     await tween(0.16, (q) => { hero.x = toX + Math.sin(Math.PI * q) * 0.45; swing = Math.sin(Math.PI * q); });
@@ -1152,7 +1500,8 @@ async function move(ti) {
     c.anim = { kind: 'fly', t: 0 };
     sfx.boom();
     if (c.label) c.label.visible = false;
-    popup('+' + fmt(c.v), c.x, c.y + 1.4, 'good');
+    if (c.growLabel) { c.growLabel.visible = false; c.arrow.visible = false; }
+    popup('+' + fmt(fv), c.x, c.y + 1.4, 'good');
     await setPower(np, 0.4);
     sfx.coin();
   } else if (c.kind === 'sword') {
@@ -1170,6 +1519,7 @@ async function move(ti) {
     c.obj.visible = false;
     c.label.visible = false;
     sfx.gateGood && sfx.gateGood();
+    potionUsed = true;
     popup('x' + potionMult(), toX, c.y + 1.6, 'purple');
     burst(toX, c.y + 1, [0xb99cff, 0xffffff, 0xd4b8ff], 16, 3);
     await setPower(np, 0.45);
@@ -1225,7 +1575,33 @@ async function move(ti) {
     await tween(0.3, (q) => { c.obj.position.x = c.x + (toX - c.x) * q; c.obj.scale.setScalar(1 - q * 0.7); });
     c.obj.visible = false;
     save.stats.bombs = (save.stats.bombs || 0) + 1;
+  } else if (c.kind === 'ally') {
+    // a friend joins: from now on he walks behind the hero, waiting for the next fight
+    sfx.buy();
+    burst(c.x, c.y + 1.2, [0x2eb872, 0xffffff, 0xffbe2e], 18, 3);
+    popup(t('ally.join'), c.x, c.y + 2, 'good');
+    if (c.label) c.label.visible = false;
+    allies = ns.a;
+    await wait(0.35);
+  } else if (c.kind === 'gate') {
+    // the right power: the gate swings open
+    if (c.label) c.label.visible = false;
+    sfx.gateGood();
+    popup(t('gate.open'), toX, c.y + 1.8, 'good');
+    await tween(0.35, (q) => { c.pivot.rotation.y = -ease(q) * 1.9; });
+    c.obj.visible = false;
+    save.stats.gates = (save.stats.gates || 0) + 1;
+  } else if (c.kind === 'spy') {
+    // the spyglass: every fogged floor shows itself
+    c.taking = true;
+    await tween(0.25, (q) => { c.obj.position.x = c.x + (toX - c.x) * q; c.obj.position.y = c.y + 0.6 + Math.sin(Math.PI * q) * 0.5; });
+    c.obj.visible = false;
+    sfx.gateGood();
+    popup(t('spy.got'), toX, c.y + 1.7, 'gold');
+    level.towers.forEach((_, i) => revealTower(i, true));
+    await wait(0.3);
   } else if (c.kind === 'princess') {
+    rescued = true;
     sfx.win();
     burst(c.x, c.y + 1.2, [0xff7eb6, 0xffffff, 0xff4f8f], 20, 3);
     popup('♥', c.x, c.y + 1.5, 'bad');
@@ -1234,13 +1610,16 @@ async function move(ti) {
   if (my !== gen) return;
   c.gone = true;
   power = np;
+  allies = ns.a;
   h[ti]++;
+  revealFronts(true);
   refreshLabels();
   // step to the middle of the cleared room
   const midX = towerX[ti] - 0.1;
   if (c.kind !== 'princess') await tween(0.18, (q) => { hero.x = hero.x + (midX - hero.x) * q; hero.stride = 1; });
   hero.stride = 0;
   hero.facing = Math.PI;
+  finalMoves = movesDone();
   if (c.kind === 'boss') {
     // the boss is down: the level is over
     await bossFinale(ti);
@@ -1261,9 +1640,13 @@ async function bossFinale(ti) {
   let princess = null;
   cells.forEach((tw) => tw.forEach((c) => {
     if (c.gone) return;
-    if (c.kind === 'princess') { princess = c; return; }
+    // the old princess on top of the boss tower is freed now; one on a side tower only by a rescue
+    if (c.kind === 'princess') { if (tw.some((x) => x.kind === 'boss')) princess = c; return; }
     if (c.label) c.label.visible = false;
-    if (c.kind === 'enemy' || c.kind === 'shield') c.anim = { kind: 'fly', t: -Math.random() * 0.4 };
+    if (c.growLabel) { c.growLabel.visible = false; c.arrow.visible = false; }
+    if (c.fogObj) { c.fogObj.visible = false; c.fogLabel.visible = false; }
+    if (FIGHTS.has(c.kind) && !c.hidden) c.anim = { kind: 'fly', t: -Math.random() * 0.4 };
+    else if (c.kind === 'ally' || c.hidden) c.gone = true;
     else if (c.obj) c.obj.visible = false;
   }));
   if (princess) {
@@ -1312,8 +1695,8 @@ async function lose(c, atX) {
     spark(atX + 0.3, c.y + 0.8);
     c.pulse = 0;
   }
-  if (c.kind === 'enemy' || c.kind === 'boss' || c.kind === 'shield') {
-    popup(c.kind === 'shield' ? fmt(power) + ' < 2×' + fmt(c.v) : fmt(power) + ' < ' + fmt(c.v), atX, c.y + 1.8, 'bad');
+  if (FIGHTS.has(c.kind) || c.kind === 'boss') {
+    popup(c.kind === 'shield' ? fmt(power) + ' < 2×' + fmt(c.v) : fmt(power) + ' < ' + fmt(fightValue(c, movesDone())), atX, c.y + 1.8, 'bad');
     const x0 = hero.x;
     const y0 = hero.y;
     await tween(0.7, (q) => { hero.x = x0 - q * 1.6; hero.y = y0 + Math.sin(Math.PI * q) * 1.2 - q * 0.2; hero.spin = q * 9; hero.mult = 1 - q * 0.35; });
@@ -1335,14 +1718,17 @@ async function lose(c, atX) {
   }
   $('btn-undo').textContent = freeUndo ? t('undo.free') : t('ad.revive');
   $('btn-undo').className = 'btn ' + (freeUndo ? 'btn-gold' : 'btn-ad');
-  $('lost-line').textContent = t(c.kind === 'trap' ? 'lost.trap' : c.kind === 'curse' ? 'lost.curse' : c.kind === 'shield' ? 'lost.shield' : c.kind === 'fuse' ? 'lost.fuse' : 'lost.enemy');
+  $('lost-line').textContent = t(c.kind === 'trap' ? 'lost.trap' : c.kind === 'curse' ? 'lost.curse' : c.kind === 'shield' ? 'lost.shield' : c.kind === 'fuse' ? 'lost.fuse' : c.kind === 'grow' ? 'lost.grow' : 'lost.enemy');
   showScreen('screen-lost');
   busy = false;
 }
 
+let finalMoves = 0; // moves of the winning run (the finale clears the rest of the board)
 async function win() {
   const my = gen;
   state = 'won';
+  $('goal-bar').hidden = true;
+  $('fog-bar').hidden = true;
   buzz([30, 40, 30]);
   // victory dance: three hops and a spin
   const baseY = hero.y;
@@ -1364,7 +1750,9 @@ async function win() {
     if (!save.week || save.week.w !== EVENT.week) save.week = { w: EVENT.week, wins: 0, claimed: false };
     save.week.wins++;
   }
-  const stars = aids === 0 ? 3 : aids <= 2 ? 2 : 1;
+  // stars: one per goal met; levels without goals keep the old rule (hints and undo cost stars)
+  const met = goals.length > 1 ? goalsMet(goals, { won: true, moves: finalMoves, power, princess: rescued, potion: potionUsed, aids }) : null;
+  const stars = met ? met.filter(Boolean).length : aids === 0 ? 3 : aids <= 2 ? 2 : 1;
   if (custom) { /* towers from the builder give no stars or coins */ }
   else if (level.daily) {
     if (firstDaily) {
@@ -1397,7 +1785,7 @@ async function win() {
   lastShare = custom ? { title: t('code.shareTitle'), line: level.code ? t('code.shareLine', { code: prettyCode(level.code) }) : t('sh.dare') }
     : { title: level.daily ? t('dt.won') : t('sh.win', { n: level.n }), line: t('sh.dare') };
   if (custom) track('code_win', { mine: !!level.mine, moves: history.length });
-  else track('level_win', { level: level.n, moves: history.length, stars });
+  else track('level_win', { level: level.n, moves: history.length, stars, goals: met ? met.map(Number).join('') : '' });
   if (level.n === 3 && !custom && !save.notifAsked) { save.notifAsked = 1; writeSave(save); askNotificationPermission(); }
   await wait(1.1);
   if (my !== gen) return;
@@ -1417,7 +1805,9 @@ async function win() {
   $('btn-double').hidden = !reward;
   showTrialOffer();
   showCardDrop(drop, 'won-card', 'wc');
-  $('stars-note').textContent = t(stars === 3 ? 'stars.3' : 'stars.less');
+  $('won-goals').hidden = !met;
+  $('won-goals').innerHTML = met ? goalItems(met.map((x) => (x ? 'met' : 'miss'))) : '';
+  $('stars-note').textContent = met ? t(stars === 3 ? 'goals.all' : 'goals.some') : t(stars === 3 ? 'stars.3' : 'stars.less');
   $('stars-note').hidden = custom;
   const starEls = [...document.querySelectorAll('#stars .star')];
   starEls.forEach((el) => el.classList.remove('on'));
@@ -1587,6 +1977,9 @@ function undo(fromShield = false) {
   h = last.h;
   power = last.power;
   keys = last.keys || 0;
+  allies = last.allies || 0;
+  rescued = !!last.rescued;
+  potionUsed = !!last.potionUsed;
   armed = !!last.armed;
   shownPower = power;
   hero.alive = true;
@@ -1610,7 +2003,7 @@ function undo(fromShield = false) {
 
 // ---------------------------------------------------------------- UI
 const screens = ['screen-home', 'screen-how', 'screen-won', 'screen-lost', 'screen-shop', 'screen-map', 'screen-intro', 'screen-daily', 'screen-treasure', 'screen-ach', 'screen-settings',
-  'screen-rule', 'screen-album', 'screen-editor', 'screen-code', 'screen-xmas'];
+  'screen-rule', 'screen-album', 'screen-editor', 'screen-code', 'screen-xmas', 'screen-goals'];
 function showScreen(id) {
   for (const s of screens) $(s).hidden = s !== id;
 }
@@ -1696,8 +2089,8 @@ function renderShop() {
       li.appendChild(maxed ? stateButton('up-' + key, t('max'), true) : buyButton('up-' + key, up.cost(lvl), t('up.' + key), () => { save.up[key]++; }));
       list.appendChild(li);
     }
-    save.boost = save.boost || { shield: 1, scope: 1, bomb: 1 };
-    for (const [b, cost] of [['shield', 80], ['scope', 60], ['bomb', 100]]) {
+    boostBag();
+    for (const [b, cost] of [['shield', 80], ['scope', 60], ['bomb', 100], ['spy', 70]]) {
       const li = row(`${t('boost.' + b)} <span class="lvl-tag">×${save.boost[b] || 0}</span>`, `<p>${t('boost.' + b + '.d')}</p>`,
         `<span class="icon-tile tile-hint" aria-hidden="true">${BOOST_ICON[b]}</span>`);
       li.appendChild(buyButton('boost-buy-' + b, cost, t('boost.' + b), () => { save.boost[b] = (save.boost[b] || 0) + 1; updateBoosts(); }));
@@ -1818,6 +2211,9 @@ function showBackdrop() {
   shownPower = power;
   history = [];
   keys = 0;
+  allies = 0;
+  revealed = new Set();
+  goals = [];
   armed = false;
   hero.alive = true;
   hero.spin = 0;
@@ -1861,7 +2257,8 @@ on('btn-won-shop', () => { sfx.tap(); openShop(null, 'won'); });
 on('btn-shop-back', closeShop);
 on('btn-intro-go', () => { sfx.tap(); save.seenIntro = 1; save.seenHow = true; writeSave(save); startLevel(0); });
 on('btn-daily', claimDaily);
-on('btn-rule-ok', () => { sfx.tap(); showScreen(null); });
+on('btn-rule-ok', () => { sfx.tap(); closeCards(); });
+on('btn-goals-go', () => { sfx.tap(); closeCards(); });
 on('btn-album', openAlbum);
 on('btn-album-back', () => {
   sfx.tap();
@@ -2150,7 +2547,7 @@ function playCustom(p, o) {
   const L = { n: (p.world || 0) * 25 + 1, start: p.start, towers: p.towers.map((tw) => tw.map((c) => ({ ...c }))), custom: true, mine: !!o.mine, code: o.code || '' };
   startLevel(L.n, L);
 }
-const editor = createEditor({ save, writeSave, t, sfx, track, solvePlain, showScreen, play: playCustom, goHome, shareText });
+const editor = createEditor({ save, writeSave, t, sfx, track, solvePlain, fairPlain: (p) => planPlain(p, { fair: true }), showScreen, play: playCustom, goHome, shareText });
 function backToEditor() { goHome(); editor.open(); }
 on('btn-editor', () => { sfx.tap(); editor.open(); });
 on('btn-code', () => { sfx.tap(); editor.openCode(); });
@@ -2224,7 +2621,7 @@ on('btn-settings-back', () => { sfx.tap(); goHome(); });
 
 // ---------------------------------------------------------------- account (Supabase, shared with Not a Fake Ad)
 const anyModalOpen = () => ['screen-shop', 'screen-map', 'screen-intro', 'screen-daily', 'screen-treasure', 'screen-ach', 'screen-settings', 'screen-how', 'screen-ad',
-  'screen-rule', 'screen-album', 'screen-editor', 'screen-code', 'screen-xmas']
+  'screen-rule', 'screen-album', 'screen-editor', 'screen-code', 'screen-xmas', 'screen-goals']
   .some((id) => !$(id).hidden) || !$('screen-account').hidden;
 const account = createAccount({
   save, writeSave, sfx, track, fmt, anyModalOpen,
@@ -2396,17 +2793,19 @@ function frame() {
   for (const c of clouds) { c.position.x += c.userData.speed * dt; if (c.position.x > 30) c.position.x = -30; }
 
   // characters
-  enemySet.begin(); bossSet.begin(); princessSet.begin(); heroSet.begin();
+  enemySet.begin(); bossSet.begin(); princessSet.begin(); heroSet.begin(); allySet.begin();
   if (level) {
     for (const tw of cells) for (const c of tw) {
-      if (c.kind !== 'enemy' && c.kind !== 'boss' && c.kind !== 'princess' && c.kind !== 'shield') {
-        if (c.obj && !c.gone && !c.taking && c.kind !== 'trap' && c.kind !== 'lock') {
-          const base = c.kind === 'sword' ? 0.45 : c.kind === 'curse' || c.kind === 'key' ? 0.6 : 0.15;
+      if (c.arrow && c.arrow.visible) c.arrow.position.y = c.y + 0.78 * c.scale - 0.62 + Math.abs(Math.sin(time * 4 + c.x)) * 0.12;
+      if (c.kind !== 'enemy' && c.kind !== 'boss' && c.kind !== 'princess' && c.kind !== 'shield' && c.kind !== 'grow' && c.kind !== 'ally') {
+        if (c.obj && !c.gone && !c.taking && !c.hidden && c.kind !== 'trap' && c.kind !== 'lock' && c.kind !== 'gate') {
+          const base = c.kind === 'sword' ? 0.45 : c.kind === 'curse' || c.kind === 'key' || c.kind === 'spy' ? 0.6 : 0.15;
           c.obj.position.y = c.y + base + Math.sin(time * 2.5 + c.x) * 0.08;
-          c.obj.rotation.y = time * 1.6;
+          c.obj.rotation.y = c.kind === 'spy' ? Math.sin(time * 1.4) * 0.7 : time * 1.6;
         }
         continue;
       }
+      if (c.hidden) { if (c.obj) c.obj.visible = false; continue; }
       if (c.gone && !c.anim) { if (c.obj) c.obj.visible = false; continue; }
       let x = c.x;
       let y = c.y;
@@ -2424,9 +2823,10 @@ function frame() {
         s *= 1 - q * (big ? 0.5 : 0.7);
         face += q * (big ? 22 : 14);
       }
-      const set = c.kind === 'boss' ? bossSet : c.kind === 'princess' ? princessSet : enemySet;
+      const set = c.kind === 'boss' ? bossSet : c.kind === 'princess' ? princessSet : c.kind === 'ally' ? allySet : enemySet;
+      if (c.kind === 'ally') face = Math.PI + Math.sin(time * 2.4) * 0.35;
       const bob = Math.abs(Math.sin(time * 3 + c.x * 2)) * 0.03;
-      set.add(x, 0.05, face, s, time * 3 + c.x, 0, c.kind === 'shield' ? shieldHelmet : null, y + bob);
+      set.add(x, 0.05, face, s, time * 3 + c.x, 0, c.kind === 'shield' ? shieldHelmet : c.kind === 'grow' ? growHelmet : null, y + bob);
       if (c.obj) {
         c.obj.visible = !c.anim;
         c.obj.position.set(x - 0.22 * s / 1.5, y + bob + 0.42 * s / 1.5, 0.45);
@@ -2437,6 +2837,11 @@ function frame() {
     // the hero grows as the power climbs, like in the ads
     const hs = Math.min(2.15, Math.max(1.45, 1.6 + 0.42 * Math.log10(Math.max(1, shownPower) / Math.max(1, startP)))) * hero.mult;
     heroSet.add(hero.x, hero.z, hero.facing + hero.spin, hs, hero.phase, hero.stride, hero.flash > 0 ? flashColor : null, hero.y);
+    // allies walk a step behind the hero (the first one runs ahead when he fights)
+    if (hero.alive) for (let i = 0; i < Math.min(3, allies); i++) {
+      const at = i === 0 && allyHit;
+      allySet.add(at ? allyHit.x : hero.x - 0.62 - i * 0.42, hero.z - 0.05, at ? -Math.PI / 2 : hero.facing, 1.35, hero.phase + i, at ? 1 : hero.stride, null, at ? allyHit.y : hero.y);
+    }
     heroLabel.visible = hero.alive || shownPower > 0;
     heroLabel.position.set(hero.x, hero.y + 0.78 * hs + 0.42, 0.9);
     // the sword, once picked up, stays in the hero's right hand
@@ -2462,7 +2867,7 @@ function frame() {
     keyCarry.rotation.y = Math.sin(time * 2) * 0.6;
     heroLabel.userData.set(fmt(shownPower), '#9cc4ff');
   } else heroLabel.visible = false;
-  enemySet.end(); bossSet.end(); princessSet.end(); heroSet.end();
+  enemySet.end(); bossSet.end(); princessSet.end(); heroSet.end(); allySet.end();
 
   if (hintFrame) hintFrame.children.forEach((m) => (m.material.opacity = 0.55 + Math.sin(time * 8) * 0.4));
   for (let i = confetti.length - 1; i >= 0; i--) {
@@ -2518,6 +2923,12 @@ window.__tower = {
   move,
   undo,
   solveNow: () => solve(remainingLevel()),
+  get goals() { return goals.map((g, i) => ({ ...g, text: goalLine(g), status: goalStatus()[i] })); },
+  get allies() { return allies; },
+  get revealed() { return [...revealed]; },
+  goalsGo: () => closeCards(),
+  // a run from the start that meets every goal (with this run's start power and week)
+  planGoals: () => plan({ start: power, keys, allies, moves: movesDone(), towers: level.towers.map((tw, i) => tw.slice(h[i])) }, goalRules(goals)),
   season: (v) => { season.force(v); if (state === 'home') goHome(); else applySeason(); return xmasOn; },
   get xmas() { return xmasOn; },
   editor: () => editor.open(),

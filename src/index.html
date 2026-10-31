@@ -311,6 +311,44 @@
   /* ---------- free hint, home mini buttons ---------- */
   .badge-free { right: -12px; min-width: 0; padding: 0 5px; background: var(--gold); color: var(--ink); font-size: 11px; letter-spacing: 0.04em; transform: rotate(8deg); }
   .r-fuse { background: #5d5172; font-size: 17px !important; }
+  .r-grow { background: #ff9f5a; font-size: 17px !important; } .r-gate { background: #4cc9c0; font-size: 17px !important; } .r-ally { background: #7fe0b0; font-size: 18px !important; }
+  .r-fog { background: #dfe6ef; } .r-spy { background: #ffe07a; font-size: 18px !important; } .r-star { background: var(--gold); } .r-order { background: #b99cff; font-size: 15px !important; }
+
+  /* ---------- goals (stars) ---------- */
+  .goal-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; text-align: left; }
+  .goal-list li { display: flex; align-items: center; gap: 10px; border: 3px solid var(--ink); border-radius: 14px; background: #fff; padding: 8px 12px; font-weight: 800; font-size: 16px; line-height: 1.2; }
+  .goal-list .g-star { flex: none; width: 30px; height: 30px; display: grid; place-items: center; font-size: 22px; line-height: 1; color: var(--gold-deep); }
+  .goal-list .g-text { flex: 1; min-width: 0; }
+  .goal-list li.met { background: #e9fbef; }
+  .goal-list li.met .g-star { color: var(--green-deep); }
+  .goal-list li.miss { background: #fff1ee; color: var(--ink-soft); }
+  .goal-list li.miss .g-star { color: var(--red); }
+  .goal-results li { padding: 6px 10px; font-size: 14px; }
+  .goal-results .g-star { width: 24px; height: 24px; font-size: 18px; }
+  .goals-card .fog-list { justify-content: center; }
+  .hud-bars { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 10px; }
+  .goal-bar, .fog-bar { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; max-width: 100%; }
+  .goal-pill { display: inline-flex; align-items: center; gap: 4px; background: var(--paper); border: 2px solid var(--ink); border-radius: 999px; box-shadow: 0 2px 0 var(--ink);
+               padding: 1px 9px 0 6px; font-family: var(--font-display); font-weight: 800; font-size: 14px; line-height: 1.4; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .goal-pill i { font-style: normal; color: var(--gold-deep); }
+  .goal-pill.met { background: #c9f2da; } .goal-pill.met i { color: var(--green-deep); }
+  .goal-pill.miss { background: #ffd9cf; color: var(--ink-soft); text-decoration: line-through; } .goal-pill.miss i { color: var(--red); }
+  .fog-list { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+  .fog-chip { font-family: var(--font-display); font-weight: 800; font-size: 13px; line-height: 1.35; color: #fff; -webkit-text-stroke: 2.5px var(--ink); paint-order: stroke fill;
+              border: 2px solid var(--ink); border-radius: 8px; padding: 0 6px; }
+  .fog-chip.seen { opacity: 0.35; text-decoration: line-through; }
+  .fog-label { font-family: var(--font-display); font-weight: 800; font-size: 13px; color: var(--ink); background: #dfe6ef; border: 2px solid var(--ink); border-radius: 8px; padding: 0 6px; line-height: 1.35; }
+  .rule-emoji { align-self: center; width: 112px; height: 112px; display: grid; place-items: center; font-size: 64px; line-height: 1; background: #fff2b8; border: 3px solid var(--ink);
+                border-radius: 22px; box-shadow: 0 0 0 3px var(--gold), 0 4px 0 var(--ink); transform: rotate(-4deg); font-family: var(--font-display); font-weight: 800; color: #fff; -webkit-text-stroke: 5px var(--ink); paint-order: stroke fill; }
+  /* short phones: the goal results replace the joke line and the note, so "Next" stays on screen */
+  @media (max-height: 700px) {
+    #screen-won .card { gap: 10px; padding-block: 16px; }
+    #screen-won .card:has(#won-goals:not([hidden])) #won-line, #won-goals:not([hidden]) ~ #stars-note { display: none; }
+    #screen-won .goal-results li { padding: 3px 10px; font-size: 13px; border-width: 2px; }
+    #screen-won .star { width: 48px; height: 48px; } #screen-won .star:nth-child(2) { width: 62px; height: 62px; }
+    #screen-won .won-coins { font-size: 32px; }
+  }
+  @media (max-width: 370px), (max-height: 700px) { .goal-pill { font-size: 13px; padding: 0 7px 0 5px; } .hud-bars { margin-top: 6px; gap: 4px; } #taunt { font-size: 18px; margin-top: 10px; } }
   .btn-row3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
   /* the extra row of small buttons takes its room from the gap above, so the logo stays put */
   .home-bottom { margin-top: max(0px, calc(6vh - 46px)); }
@@ -381,6 +419,9 @@
   .k-enemy { background: #ff8f84; } .k-sword { background: #6fe0a0; } .k-potion { background: #b99cff; } .k-trap { background: #ffb766; } .k-boss { background: var(--red); }
   .k-curse { background: #9b6cff; } .k-shield { background: #9fb0c8; } .k-key { background: var(--gold); } .k-lock { background: #c49a6c; } .k-princess { background: #ff9ac8; }
   .k-fuse { background: #5d5172; } .k-erase { background: #fff; }
+  .k-grow { background: #ff9f5a; } .k-gate { background: #4cc9c0; } .k-ally { background: #7fe0b0; } .k-spy { background: #ffe07a; } .k-fog { background: #8aa0bd; }
+  .ed-tile.fog { background-image: repeating-linear-gradient(135deg, rgba(255,255,255,0.75) 0 6px, rgba(223,230,239,0.75) 6px 12px); border-style: dashed; }
+  .ed-palette .ed-tile.k-gate, .ed-col .ed-tile.k-gate, .ed-tile.k-grow { font-size: 14px; }
   .ed-sel { display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 58px; }
   .ed-sel b { font-family: var(--font-display); font-size: 19px; line-height: 1.1; }
   .ed-sel small { font-weight: 700; font-size: 13px; color: var(--ink-soft); text-wrap: balance; }
@@ -485,11 +526,16 @@
     </div>
   </div>
   <div id="taunt"></div>
+  <div class="hud-bars" id="hud-bars">
+    <div class="goal-bar" id="goal-bar" hidden></div>
+    <div class="fog-bar" id="fog-bar" hidden></div>
+  </div>
   <div id="tip" hidden></div>
   <div id="boosts">
     <button class="boost" id="boost-shield" type="button" aria-label="Shield" data-i18n-label="boost.shield">🛡️<span class="badge" id="bc-shield">1</span></button>
     <button class="boost" id="boost-scope" type="button" aria-label="Scope" data-i18n-label="boost.scope">🔭<span class="badge" id="bc-scope">1</span></button>
     <button class="boost" id="boost-bomb" type="button" aria-label="Bomb" data-i18n-label="boost.bomb">💣<span class="badge" id="bc-bomb">1</span></button>
+    <button class="boost" id="boost-spy" type="button" aria-label="Spyglass" data-i18n-label="boost.spy" hidden>🔍<span class="badge" id="bc-spy">1</span></button>
   </div>
 </div>
 <div id="popups"></div>
@@ -573,6 +619,13 @@
       <b class="r-curse">-50%</b><span data-i18n="how.curse">Curse: halves your power.</span>
       <b class="r-key">🔑</b><span data-i18n="how.key">Key and door: grab the key first, then open the locked door.</span>
       <b class="r-fuse">💣5</b><span data-i18n="how.fuse">Lit bomb: defuse it before its number runs out.</span>
+      <b class="r-grow">5▲2</b><span data-i18n="how.grow">Growing enemy</span>
+      <b class="r-order">x2</b><span data-i18n="how.order">Order matters</span>
+      <b class="r-gate">=24</b><span data-i18n="how.gate">Power gate</span>
+      <b class="r-ally">🤝</b><span data-i18n="how.ally">Ally</span>
+      <b class="r-fog">?</b><span data-i18n="how.fog">Fog</span>
+      <b class="r-spy">🔍</b><span data-i18n="how.spy">Spyglass</span>
+      <b class="r-star">★</b><span data-i18n="how.goals">Goals</span>
     </div>
     <button class="btn" id="btn-how-close" type="button" data-i18n="ok">Got it</button>
   </div>
@@ -759,6 +812,7 @@
     <div class="stars" id="stars"><svg class="star" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 4l6 13 14 1.6-10.5 9.6 3 14L24 35l-12.5 7.2 3-14L4 18.6 18 17z"/></svg><svg class="star" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 4l6 13 14 1.6-10.5 9.6 3 14L24 35l-12.5 7.2 3-14L4 18.6 18 17z"/></svg><svg class="star" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 4l6 13 14 1.6-10.5 9.6 3 14L24 35l-12.5 7.2 3-14L4 18.6 18 17z"/></svg></div>
     <h2 id="won-title">Level 1 cleared!</h2>
     <p id="won-line"></p>
+    <ul class="goal-list goal-results" id="won-goals" hidden></ul>
     <p class="stars-note" id="stars-note"></p>
     <div class="won-coins"><span class="coin-icon" aria-hidden="true"></span><span id="won-coins">+20</span></div>
     <div class="row won-card" id="won-card" hidden>
@@ -785,12 +839,23 @@
   </div>
 </section>
 
+<section id="screen-goals" class="screen screen-dim" hidden>
+  <div class="card goals-card">
+    <span class="ad-tag" id="goals-tag">Level 1</span>
+    <h2 data-i18n="goals.title">Three stars</h2>
+    <ul class="goal-list" id="goals-list"></ul>
+    <div class="fog-list" id="goals-fog" hidden></div>
+    <button class="btn btn-big btn-green" id="btn-goals-go" type="button" data-i18n="goals.go">Go!</button>
+  </div>
+</section>
+
 <section id="screen-rule" class="screen screen-dim" hidden>
   <div class="card rule-card">
     <span class="ad-tag" data-i18n="rule.tag">New!</span>
     <div class="rule-art mini-card rar-e" id="rule-art" aria-hidden="true"></div>
-    <h2 data-i18n="rule.fuse.t">Lit bomb!</h2>
-    <p data-i18n="rule.fuse.b">The number on the bomb is how many moves you have left to reach it. Step in to defuse it. If it hits 0, boom.</p>
+    <div class="rule-emoji" id="rule-emoji" aria-hidden="true" hidden></div>
+    <h2 id="rule-title">Lit bomb!</h2>
+    <p id="rule-body">The number on the bomb is how many moves you have left to reach it. Step in to defuse it. If it hits 0, boom.</p>
     <button class="btn btn-big btn-green" id="btn-rule-ok" type="button" data-i18n="ok">Got it</button>
   </div>
 </section>
@@ -828,6 +893,12 @@
         <button class="btn btn-plain ed-step" id="ed-val-minus" type="button" aria-label="−">−</button>
         <input class="text-input ed-num" id="ed-val-in" type="number" inputmode="numeric" min="1" aria-labelledby="ed-val-lbl">
         <button class="btn btn-plain ed-step" id="ed-val-plus" type="button" aria-label="+">+</button>
+      </div>
+      <div class="ed-val" id="ed-val2" hidden>
+        <span class="ed-lbl" id="ed-val2-lbl">Per move</span>
+        <button class="btn btn-plain ed-step" id="ed-val2-minus" type="button" aria-label="−">−</button>
+        <input class="text-input ed-num" id="ed-val2-in" type="number" inputmode="numeric" min="1" aria-labelledby="ed-val2-lbl">
+        <button class="btn btn-plain ed-step" id="ed-val2-plus" type="button" aria-label="+">+</button>
       </div>
     </div>
     <div class="ed-palette" id="ed-palette" role="toolbar" aria-label="Floors" data-i18n-label="ed.tools"></div>

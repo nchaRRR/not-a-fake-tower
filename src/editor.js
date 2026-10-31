@@ -1,10 +1,13 @@
 // The tower builder: the player stacks floors into up to 4 towers, the solver says at once whether
 // the tower can be won, and a solvable tower turns into a share code. Plus the "play a code" screen.
-import { encode, decode, pretty, VALUED, LIMITS } from './codes.js';
+import { encode, decode, pretty, VALUED, TWO, LIMITS } from './codes.js';
 import { WORLDS } from './worlds.js';
+import { FOGGABLE } from './rules.js';
 
-const TOOLS = ['enemy', 'shield', 'boss', 'sword', 'potion', 'trap', 'curse', 'key', 'lock', 'princess', 'fuse', 'erase'];
-const DEFAULT_V = { enemy: 5, shield: 4, boss: 40, sword: 5, trap: 4, fuse: 4 };
+// 'fog' is not a floor: it puts a cloud over (or takes it off) the floor you tap
+const TOOLS = ['enemy', 'shield', 'grow', 'boss', 'sword', 'potion', 'trap', 'curse', 'key', 'lock', 'gate', 'ally', 'princess', 'fuse', 'spy', 'fog', 'erase'];
+const DEFAULT_V = { enemy: 5, shield: 4, boss: 40, sword: 5, trap: 4, fuse: 4, grow: 5, gate: 20 };
+const DEFAULT_W = { grow: 2, gate: 20 };
 // the same little tiles as on the rules screen
 export function tileText(c) {
   switch (c.kind) {
@@ -19,13 +22,18 @@ export function tileText(c) {
     case 'lock': return '🔒';
     case 'princess': return '👸';
     case 'fuse': return '💣' + c.v;
+    case 'grow': return c.v + '▲' + c.w;
+    case 'gate': return c.w === c.v ? '=' + c.v : c.v + '–' + c.w;
+    case 'ally': return '🤝';
+    case 'spy': return '🔍';
+    case 'fog': return '☁️';
     default: return '🗑';
   }
 }
 const stepOf = (v) => Math.max(1, Math.pow(10, Math.floor(Math.log10(Math.max(1, v))) - 1));
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.round(Number(v) || 0)));
 
-export function createEditor({ save, writeSave, t, sfx, track, solvePlain, showScreen, play, goHome, shareText }) {
+export function createEditor({ save, writeSave, t, sfx, track, solvePlain, fairPlain, showScreen, play, goHome, shareText }) {
   const $ = (id) => document.getElementById(id);
   const fresh = () => ({ start: 10, world: 0, towers: [[{ kind: 'enemy', v: 6 }, { kind: 'enemy', v: 14 }], [{ kind: 'sword', v: 5 }, { kind: 'boss', v: 32 }]] });
   let P = save.editor && Array.isArray(save.editor.towers) ? save.editor : fresh();
@@ -46,12 +54,20 @@ export function createEditor({ save, writeSave, t, sfx, track, solvePlain, showS
       return;
     }
     const old = tw[k];
+    if (tool === 'fog') {
+      // only floors above the bottom one can hide, and only some kinds
+      if (old && k > 0 && FOGGABLE.has(old.kind)) { if (old.fog) delete old.fog; else old.fog = true; }
+      sel = { t: ti, k };
+      return;
+    }
     if (tool === 'boss') {
       // only one boss: an older one becomes a plain enemy
       P.towers.forEach((x) => x.forEach((c) => { if (c.kind === 'boss' && c !== old) c.kind = 'enemy'; }));
     }
     const c = { kind: tool };
-    if (VALUED.has(tool)) c.v = old && old.v && old.kind !== 'fuse' && tool !== 'fuse' ? old.v : DEFAULT_V[tool];
+    if (VALUED.has(tool)) c.v = old && old.v && old.kind !== 'fuse' && tool !== 'fuse' && old.kind !== 'gate' && tool !== 'gate' ? old.v : DEFAULT_V[tool];
+    if (TWO.has(tool)) c.w = tool === 'gate' ? c.v : DEFAULT_W[tool];
+    if (old && old.fog && FOGGABLE.has(tool)) c.fog = true;
     tw[k] = c;
     sel = { t: ti, k };
   }
@@ -65,7 +81,10 @@ export function createEditor({ save, writeSave, t, sfx, track, solvePlain, showS
     const r = solvePlain({ start: P.start, towers });
     solvable = r.wins > 0;
     el.className = 'ed-status ' + (solvable ? 'ok' : 'bad');
-    el.textContent = solvable ? `✓ ${t('ed.ok')} · ${t(r.ratio >= 0.25 ? 'ed.easy' : r.ratio >= 0.03 ? 'ed.tricky' : 'ed.evil')}` : '✗ ' + t('ed.no');
+    // with fog, also say whether it can be won without guessing (the fairness rule of the levels)
+    const fog = towers.some((tw) => tw.some((c) => c.fog));
+    const fair = solvable && fog ? !!fairPlain({ start: P.start, towers }) : true;
+    el.textContent = solvable ? `✓ ${t('ed.ok')} · ${t(r.ratio >= 0.25 ? 'ed.easy' : r.ratio >= 0.03 ? 'ed.tricky' : 'ed.evil')}` + (fog ? ' · ' + t(fair ? 'ed.fogFair' : 'ed.fogLuck') : '') : '✗ ' + t('ed.no');
     $('btn-ed-share').disabled = !solvable;
   }
 
@@ -78,12 +97,12 @@ export function createEditor({ save, writeSave, t, sfx, track, solvePlain, showS
       tw.forEach((c, k) => {
         const b = document.createElement('button');
         b.type = 'button';
-        b.className = `ed-tile k-${c.kind}` + (sel && sel.t === ti && sel.k === k ? ' sel' : '');
+        b.className = `ed-tile k-${c.kind}` + (c.fog ? ' fog' : '') + (sel && sel.t === ti && sel.k === k ? ' sel' : '');
         b.textContent = tileText(c);
-        b.setAttribute('aria-label', t('ed.k.' + c.kind) + (c.v ? ' ' + c.v : ''));
+        b.setAttribute('aria-label', t('ed.k.' + c.kind) + (c.v ? ' ' + c.v : '') + (c.w && c.w !== c.v ? ' ' + c.w : '') + (c.fog ? ', ' + t('ed.k.fog') : ''));
         b.addEventListener('click', () => {
           sfx.tap();
-          if (tool === 'erase' || c.kind !== tool) setCell(ti, k);
+          if (tool === 'erase' || tool === 'fog' || c.kind !== tool) setCell(ti, k);
           else sel = { t: ti, k };
           changed();
         });
@@ -97,7 +116,7 @@ export function createEditor({ save, writeSave, t, sfx, track, solvePlain, showS
         add.setAttribute('aria-label', t('ed.addFloor'));
         add.addEventListener('click', () => {
           sfx.tap();
-          if (tool === 'erase') return;
+          if (tool === 'erase' || tool === 'fog') return;
           tw.push({ kind: 'potion' }); // placeholder, replaced by the tool right away
           setCell(ti, tw.length - 1);
           changed();
@@ -117,7 +136,7 @@ export function createEditor({ save, writeSave, t, sfx, track, solvePlain, showS
         sfx.tap();
         P.towers.push([]);
         const was = tool;
-        if (tool === 'erase') tool = 'enemy';
+        if (tool === 'erase' || tool === 'fog') tool = 'enemy';
         P.towers[P.towers.length - 1].push({ kind: 'potion' });
         setCell(P.towers.length - 1, 0);
         tool = was;
@@ -133,7 +152,7 @@ export function createEditor({ save, writeSave, t, sfx, track, solvePlain, showS
       const b = document.createElement('button');
       b.type = 'button';
       b.className = `ed-tile k-${k}` + (tool === k ? ' sel' : '');
-      b.textContent = k === 'erase' ? '🗑' : tileText({ kind: k, v: { enemy: 9, shield: 9, boss: 80, sword: 8, trap: 9, fuse: 5 }[k] });
+      b.textContent = k === 'erase' ? '🗑' : tileText({ kind: k, v: { enemy: 9, shield: 9, boss: 80, sword: 8, trap: 9, fuse: 5, grow: 6, gate: 20 }[k], w: { grow: 2, gate: 20 }[k] });
       b.setAttribute('aria-label', t('ed.k.' + k));
       b.setAttribute('aria-pressed', String(tool === k));
       b.addEventListener('click', () => { sfx.tap(); tool = k; render(); });
@@ -143,13 +162,19 @@ export function createEditor({ save, writeSave, t, sfx, track, solvePlain, showS
     const c = cellAt(sel);
     const shown = c || { kind: tool };
     $('ed-sel-name').textContent = t('ed.k.' + shown.kind);
-    const valued = c && VALUED.has(c.kind);
+    const valued = c && VALUED.has(c.kind) && tool !== 'fog';
     $('ed-val').hidden = !valued;
+    $('ed-val2').hidden = !(valued && TWO.has(c.kind));
     $('ed-sel-desc').hidden = !!valued;
-    $('ed-sel-desc').textContent = t('ed.d.' + shown.kind);
+    $('ed-sel-desc').textContent = t('ed.d.' + (tool === 'fog' ? 'fog' : shown.kind));
+    if (tool === 'fog') $('ed-sel-name').textContent = t('ed.k.fog');
     if (valued) {
-      $('ed-val-lbl').textContent = t(c.kind === 'fuse' ? 'ed.moves' : 'ed.power');
+      $('ed-val-lbl').textContent = t(c.kind === 'fuse' ? 'ed.moves' : c.kind === 'gate' ? 'ed.gateFrom' : 'ed.power');
       $('ed-val-in').value = c.v;
+      if (TWO.has(c.kind)) {
+        $('ed-val2-lbl').textContent = t(c.kind === 'grow' ? 'ed.growBy' : 'ed.gateTo');
+        $('ed-val2-in').value = c.w;
+      }
     }
     $('ed-start').value = P.start;
     $('ed-world').textContent = '🌍 ' + t('world.' + WORLDS[P.world || 0].id);
@@ -160,14 +185,26 @@ export function createEditor({ save, writeSave, t, sfx, track, solvePlain, showS
     const c = cellAt(sel);
     if (!c) return;
     c.v = clamp(v, 1, c.kind === 'fuse' ? 30 : LIMITS.maxV);
+    if (c.kind === 'gate') c.w = Math.max(c.v, c.w);
+    changed();
+  }
+  // the second number: growth per move, or the top of a gate's range
+  function setVal2(v) {
+    const c = cellAt(sel);
+    if (!c || !TWO.has(c.kind)) return;
+    c.w = clamp(v, c.kind === 'gate' ? c.v : 1, LIMITS.maxV);
     changed();
   }
   const bump = (dir) => { const c = cellAt(sel); if (c) { sfx.tap(); setVal(c.v + dir * stepOf(c.v - (dir < 0 ? 1 : 0))); } };
+  const bump2 = (dir) => { const c = cellAt(sel); if (c && TWO.has(c.kind)) { sfx.tap(); setVal2(c.w + dir * stepOf(c.w - (dir < 0 ? 1 : 0))); } };
   const bumpStart = (dir) => { sfx.tap(); P.start = clamp(P.start + dir * stepOf(P.start - (dir < 0 ? 1 : 0)), 1, LIMITS.maxStart); changed(); };
   const on = (id, fn) => $(id).addEventListener('click', (e) => { e.stopPropagation(); fn(); });
   on('ed-val-minus', () => bump(-1));
   on('ed-val-plus', () => bump(1));
   $('ed-val-in').addEventListener('change', () => setVal($('ed-val-in').value));
+  on('ed-val2-minus', () => bump2(-1));
+  on('ed-val2-plus', () => bump2(1));
+  $('ed-val2-in').addEventListener('change', () => setVal2($('ed-val2-in').value));
   on('ed-start-minus', () => bumpStart(-1));
   on('ed-start-plus', () => bumpStart(1));
   $('ed-start').addEventListener('change', () => { P.start = clamp($('ed-start').value, 1, LIMITS.maxStart); changed(); });
